@@ -1,41 +1,51 @@
 """
 Synaps Finder Router — Directory browsing APIs
+Optimized for low-power NAS with paginated responses.
 """
 from fastapi import APIRouter, Query, HTTPException
 from typing import Optional
 import os
 import mimetypes
+import logging
 from datetime import datetime
 
 from config import STORAGE_PATH, ALL_EXTENSIONS, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
+
+logger = logging.getLogger("synaps.finder")
 
 router = APIRouter(prefix="/api/finder", tags=["finder"])
 
 
 @router.get("/browse")
-def browse_directory(path: str = Query("", description="Relative path from storage root")):
+def browse_directory(
+    path: str = Query("", description="Relative path from storage root"),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(200, ge=1, le=1000),
+):
     """
     Browse a directory in the NAS filesystem.
-    Returns folders and files at the given path.
+    Paginated for large directories on weak hardware.
     """
     # Sanitize path to prevent directory traversal
     clean_path = os.path.normpath(path).lstrip("/")
     if ".." in clean_path:
         raise HTTPException(status_code=400, detail="Invalid path")
 
-    full_path = os.path.join(STORAGE_PATH, clean_path) if clean_path else STORAGE_PATH
-    
+    full_path = os.path.join(STORAGE_PATH, clean_path) if clean_path and clean_path != '.' else STORAGE_PATH
+
     if not os.path.exists(full_path):
         raise HTTPException(status_code=404, detail="Directory not found")
-    
+
     if not os.path.isdir(full_path):
         raise HTTPException(status_code=400, detail="Not a directory")
 
-    items = []
     try:
         entries = sorted(os.listdir(full_path))
     except PermissionError:
         raise HTTPException(status_code=403, detail="Permission denied")
+    except OSError as e:
+        logger.error(f"Error listing directory {full_path}: {e}")
+        raise HTTPException(status_code=500, detail="Cannot read directory")
 
     folders = []
     files = []
@@ -45,15 +55,15 @@ def browse_directory(path: str = Query("", description="Relative path from stora
             continue
 
         entry_path = os.path.join(full_path, entry)
-        relative_entry = os.path.join(clean_path, entry) if clean_path else entry
-        
+        relative_entry = os.path.join(clean_path, entry) if clean_path and clean_path != '.' else entry
+
         try:
             stat = os.stat(entry_path)
         except OSError:
             continue
 
         if os.path.isdir(entry_path):
-            # Count children
+            # Count children without recursive scanning
             try:
                 child_count = len([c for c in os.listdir(entry_path) if not c.startswith('.')])
             except OSError:
@@ -69,7 +79,7 @@ def browse_directory(path: str = Query("", description="Relative path from stora
         else:
             ext = os.path.splitext(entry)[1].lower()
             mime_type, _ = mimetypes.guess_type(entry_path)
-            
+
             file_type = "other"
             if ext in IMAGE_EXTENSIONS:
                 file_type = "image"
@@ -92,31 +102,39 @@ def browse_directory(path: str = Query("", description="Relative path from stora
 
     # Build breadcrumb
     breadcrumb = [{"name": "Storage", "path": ""}]
-    if clean_path:
+    if clean_path and clean_path != '.':
         parts = clean_path.split(os.sep)
         for i, part in enumerate(parts):
             breadcrumb.append({
                 "name": part,
-                "path": os.sep.join(parts[:i+1]),
+                "path": os.sep.join(parts[:i + 1]),
             })
 
+    # Paginate files (folders always shown in full since they're usually few)
+    total_files = len(files)
+    offset = (page - 1) * per_page
+    paginated_files = files[offset:offset + per_page]
+
     return {
-        "current_path": clean_path or "/",
+        "current_path": clean_path if clean_path and clean_path != '.' else "/",
         "breadcrumb": breadcrumb,
         "folders": folders,
-        "files": files,
+        "files": paginated_files,
         "total_folders": len(folders),
-        "total_files": len(files),
+        "total_files": total_files,
+        "page": page,
+        "per_page": per_page,
     }
 
 
 @router.get("/tree")
-def get_directory_tree(depth: int = Query(2, ge=1, le=5)):
-    """Get a directory tree structure up to specified depth."""
+def get_directory_tree(depth: int = Query(2, ge=1, le=4)):
+    """Get a directory tree structure up to specified depth.
+    Limited depth to avoid slow responses on NAS."""
     def build_tree(path: str, current_depth: int) -> list:
         if current_depth <= 0:
             return []
-        
+
         result = []
         try:
             entries = sorted(os.listdir(path))
@@ -126,7 +144,7 @@ def get_directory_tree(depth: int = Query(2, ge=1, le=5)):
         for entry in entries:
             if entry.startswith('.'):
                 continue
-            
+
             entry_path = os.path.join(path, entry)
             if os.path.isdir(entry_path):
                 relative = os.path.relpath(entry_path, STORAGE_PATH)

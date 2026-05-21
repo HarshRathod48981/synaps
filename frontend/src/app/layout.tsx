@@ -1,12 +1,20 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Synaps — Personal Media Cloud',
   description: 'A beautiful personal media cloud for your NAS. Browse, stream, and sync your media effortlessly.',
-  viewport: 'width=device-width, initial-scale=1, viewport-fit=cover',
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
   themeColor: '#0a0a0b',
 };
+
+// Client component wrapper must be imported before use
+import { AppShell } from '@/components/AppShell';
 
 export default function RootLayout({
   children,
@@ -27,6 +35,3 @@ export default function RootLayout({
     </html>
   );
 }
-
-// Client component wrapper for sidebar + viewer
-import { AppShell } from '@/components/AppShell';

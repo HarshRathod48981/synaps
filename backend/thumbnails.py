@@ -1,11 +1,30 @@
 """
 Synaps Thumbnail Generator
 Lightweight thumbnail generation with caching.
+Supports: JPEG, PNG, WebP, HEIC, MP4/MOV videos, PDFs.
+Optimized for Core2Duo NAS.
 """
 import os
+import subprocess
+import logging
 from pathlib import Path
 from PIL import Image
 from config import THUMBNAIL_DIR, THUMBNAIL_SIZE, THUMBNAIL_QUALITY, VIDEO_EXTENSIONS
+
+logger = logging.getLogger("synaps.thumbnails")
+
+# Check for pillow-heif support
+try:
+    from pillow_heif import register_heif_opener
+    register_heif_opener()
+    HAS_HEIF = True
+    logger.info("HEIC support enabled via pillow-heif")
+except ImportError:
+    HAS_HEIF = False
+    logger.warning("pillow-heif not installed — HEIC thumbnails disabled")
+
+HEIC_EXTENSIONS = {'.heic', '.heif'}
+PDF_EXTENSIONS = {'.pdf'}
 
 
 def ensure_thumbnail_dir():
@@ -21,10 +40,10 @@ def get_thumbnail_path(file_path: str) -> str:
 
 
 def generate_image_thumbnail(source_path: str, thumb_path: str) -> bool:
-    """Generate a thumbnail for an image file."""
+    """Generate a thumbnail for an image file (JPEG, PNG, WebP, HEIC)."""
     try:
         with Image.open(source_path) as img:
-            # Convert RGBA to RGB for JPEG/WebP compatibility
+            # Convert RGBA/P to RGB for WebP compatibility
             if img.mode in ('RGBA', 'LA', 'P'):
                 img = img.convert('RGB')
 
@@ -33,34 +52,100 @@ def generate_image_thumbnail(source_path: str, thumb_path: str) -> bool:
             img.save(thumb_path, "WEBP", quality=THUMBNAIL_QUALITY, optimize=True)
             return True
     except Exception as e:
-        print(f"Thumbnail generation failed for {source_path}: {e}")
+        logger.error(f"Image thumbnail failed: {source_path}: {e}")
         return False
 
 
 def generate_video_thumbnail(source_path: str, thumb_path: str) -> bool:
-    """Generate a thumbnail for a video using ffmpeg."""
-    import subprocess
+    """Generate a thumbnail for a video using ffmpeg.
+    Extracts a single frame at 0.5s — lightweight for Core2Duo."""
     try:
+        # First try at 0.5s, fallback to first frame if video is very short
         result = subprocess.run(
             [
-                "ffmpeg", "-y", "-i", source_path,
-                "-ss", "00:00:00.100",  # 0.1 seconds into the video for short clips
-                "-vframes", "1",
+                "ffmpeg", "-y",
+                "-ss", "0.5",           # Seek to 0.5s
+                "-i", source_path,
+                "-vframes", "1",         # Extract exactly 1 frame
                 "-vf", f"scale={THUMBNAIL_SIZE[0]}:-1",
                 "-q:v", "5",
+                "-loglevel", "error",    # Suppress verbose output
                 thumb_path
             ],
             capture_output=True,
-            timeout=30
+            timeout=30,
+        )
+
+        if result.returncode == 0 and os.path.exists(thumb_path):
+            return True
+
+        # Fallback: try first frame (for very short videos)
+        result = subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-i", source_path,
+                "-vframes", "1",
+                "-vf", f"scale={THUMBNAIL_SIZE[0]}:-1",
+                "-q:v", "5",
+                "-loglevel", "error",
+                thumb_path
+            ],
+            capture_output=True,
+            timeout=30,
         )
         return result.returncode == 0 and os.path.exists(thumb_path)
+
+    except FileNotFoundError:
+        logger.error("ffmpeg not found — install with: sudo apt install ffmpeg")
+        return False
+    except subprocess.TimeoutExpired:
+        logger.error(f"Video thumbnail timed out: {source_path}")
+        return False
     except Exception as e:
-        print(f"Video thumbnail generation failed for {source_path}: {e}")
+        logger.error(f"Video thumbnail failed: {source_path}: {e}")
+        return False
+
+
+def generate_pdf_thumbnail(source_path: str, thumb_path: str) -> bool:
+    """Generate a thumbnail for a PDF using pdftoppm (poppler-utils).
+    Extracts first page only."""
+    try:
+        # Generate temporary PNG from first page
+        temp_path = thumb_path.replace('.webp', '_temp.png')
+        result = subprocess.run(
+            [
+                "pdftoppm", "-png", "-f", "1", "-l", "1",
+                "-scale-to", str(THUMBNAIL_SIZE[0]),
+                source_path, temp_path.replace('.png', '')
+            ],
+            capture_output=True,
+            timeout=15,
+        )
+
+        # pdftoppm adds -01.png suffix
+        actual_temp = temp_path.replace('.png', '-01.png')
+        if not os.path.exists(actual_temp):
+            actual_temp = temp_path.replace('.png', '-1.png')
+
+        if os.path.exists(actual_temp):
+            with Image.open(actual_temp) as img:
+                img.thumbnail(THUMBNAIL_SIZE, Image.LANCZOS)
+                img.save(thumb_path, "WEBP", quality=THUMBNAIL_QUALITY)
+            os.remove(actual_temp)
+            return True
+
+        return False
+    except FileNotFoundError:
+        logger.warning("pdftoppm not found — install with: sudo apt install poppler-utils")
+        return False
+    except Exception as e:
+        logger.error(f"PDF thumbnail failed: {source_path}: {e}")
         return False
 
 
 def generate_thumbnail(source_path: str) -> str | None:
-    """Generate a thumbnail for any media file. Returns thumbnail path or None."""
+    """Generate a thumbnail for any media file. Returns thumbnail path or None.
+    Lazy: only generates when called, result is cached on disk."""
     ensure_thumbnail_dir()
 
     thumb_path = get_thumbnail_path(source_path)
@@ -71,11 +156,17 @@ def generate_thumbnail(source_path: str) -> str | None:
 
     ext = os.path.splitext(source_path)[1].lower()
 
+    success = False
     if ext in VIDEO_EXTENSIONS:
         success = generate_video_thumbnail(source_path, thumb_path)
+    elif ext in PDF_EXTENSIONS:
+        success = generate_pdf_thumbnail(source_path, thumb_path)
     else:
+        # Images (including HEIC if pillow-heif is installed)
         success = generate_image_thumbnail(source_path, thumb_path)
 
+    if success:
+        logger.debug(f"Generated thumbnail: {os.path.basename(source_path)}")
     return thumb_path if success else None
 
 
@@ -107,4 +198,5 @@ def batch_generate_thumbnails(file_paths: list[str], db_session=None) -> dict:
     if db_session:
         db_session.commit()
 
+    logger.info(f"Batch thumbnails: {stats}")
     return stats
