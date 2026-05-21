@@ -43,8 +43,8 @@ def generate_video_thumbnail(source_path: str, thumb_path: str) -> bool:
     try:
         result = subprocess.run(
             [
-                "ffmpeg", "-i", source_path,
-                "-ss", "00:00:01",  # 1 second into the video
+                "ffmpeg", "-y", "-i", source_path,
+                "-ss", "00:00:00.100",  # 0.1 seconds into the video for short clips
                 "-vframes", "1",
                 "-vf", f"scale={THUMBNAIL_SIZE[0]}:-1",
                 "-q:v", "5",

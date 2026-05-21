@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from config import (
     STORAGE_PATH, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS,
     DOCUMENT_EXTENSIONS, RAW_EXTENSIONS, ALL_EXTENSIONS,
-    SCAN_BATCH_SIZE
+    SCAN_BATCH_SIZE, ALLOWED_SCAN_PATHS
 )
 from models import MediaFile
 
@@ -78,6 +78,11 @@ def extract_exif_date(filepath: str) -> Optional[datetime]:
     if not HAS_EXIFREAD:
         return None
 
+    # Only check files that typically have EXIF data to avoid console spam
+    ext = os.path.splitext(filepath)[1].lower()
+    if ext not in {'.jpg', '.jpeg', '.tiff', '.heic', '.raw', '.cr2', '.nef', '.arw', '.dng'}:
+        return None
+
     try:
         with open(filepath, "rb") as f:
             tags = exifread.process_file(f, stop_tag="DateTimeOriginal", details=False)
@@ -134,40 +139,46 @@ def get_best_date(filepath: str, filename: str) -> datetime:
         return datetime.now()
 
 
-def scan_directory(db: Session, base_path: str = None, force_rescan: bool = False) -> dict:
+def scan_directory(db: Session, force_rescan: bool = False) -> dict:
     """
-    Scan the storage directory and index all media files.
-    Returns scan statistics.
+    Scan the whitelisted storage directories and index all media files.
+    Optimized for low power NAS.
     """
-    if base_path is None:
-        base_path = STORAGE_PATH
-
     stats = {"scanned": 0, "new": 0, "skipped": 0, "errors": 0}
 
-    for root, dirs, files in os.walk(base_path):
-        # Skip hidden directories and thumbnail cache
-        dirs[:] = [d for d in dirs if not d.startswith('.') and d != 'thumbnails' and d != 'trash' and d != 'venv']
+    # Optimization: Pre-fetch all existing paths into a set in memory
+    # This avoids thousands of individual DB queries during os.walk
+    existing_paths = set()
+    if not force_rescan:
+        for (path,) in db.query(MediaFile.path).all():
+            existing_paths.add(path)
 
-        batch = []
+    for base_path in ALLOWED_SCAN_PATHS:
+        if not os.path.exists(base_path):
+            continue
 
-        for filename in files:
-            if filename.startswith('.'):
-                continue
+        for root, dirs, files in os.walk(base_path):
+            # Skip hidden directories and thumbnail cache
+            dirs[:] = [d for d in dirs if not d.startswith('.') and d != 'thumbnails' and d != 'trash' and d != 'venv']
+
+            batch = []
+
+            for filename in files:
+                if filename.startswith('.'):
+                    continue
 
             ext = os.path.splitext(filename)[1].lower()
             if ext not in ALL_EXTENSIONS:
                 continue
 
             filepath = os.path.join(root, filename)
-            relative_path = os.path.relpath(filepath, base_path)
+            relative_path = os.path.relpath(filepath, STORAGE_PATH)
             stats["scanned"] += 1
 
-            # Check if already indexed
-            if not force_rescan:
-                existing = db.query(MediaFile).filter(MediaFile.path == filepath).first()
-                if existing:
-                    stats["skipped"] += 1
-                    continue
+            # Fast memory lookup instead of DB query
+            if not force_rescan and filepath in existing_paths:
+                stats["skipped"] += 1
+                continue
 
             try:
                 file_stat = os.stat(filepath)
@@ -181,7 +192,7 @@ def scan_directory(db: Session, base_path: str = None, force_rescan: bool = Fals
                     filename=filename,
                     path=filepath,
                     relative_path=relative_path,
-                    directory=os.path.relpath(root, base_path),
+                    directory=os.path.relpath(root, STORAGE_PATH),
                     extension=ext,
                     mime_type=mime_type or "application/octet-stream",
                     file_size=file_stat.st_size,

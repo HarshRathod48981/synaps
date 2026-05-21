@@ -14,6 +14,12 @@ PROJECT_ROOT = BASE_DIR.parent
 # Storage path - on NAS this would be /storage, locally use mock_storage
 STORAGE_PATH = os.getenv("SYNAPS_STORAGE_PATH", str(PROJECT_ROOT / "mock_storage"))
 
+# Whitelist directories for media timeline
+ALLOWED_SCAN_PATHS = [
+    os.path.join(STORAGE_PATH, "Vault", "Harsh", "Iphone"),
+    os.path.join(STORAGE_PATH, "Vault", "Harsh", "Mac")
+]
+
 # Database
 DATABASE_URL = os.getenv("SYNAPS_DB_URL", f"sqlite:///{BASE_DIR / 'synaps.db'}")
 
