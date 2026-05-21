@@ -26,7 +26,11 @@ cd ..
 
 # Restart services
 echo "🔄 Restarting systemd services..."
-sudo systemctl restart synaps-backend
-sudo systemctl restart synaps-frontend
-
-echo "✅ Update complete! Synaps is back online."
+if systemctl list-unit-files | grep -q synaps-backend; then
+    sudo systemctl restart synaps-backend
+    sudo systemctl restart synaps-frontend
+    echo "✅ Update complete! Synaps is back online."
+else
+    echo "⚠️ Systemd services not found. You can start the app manually:"
+    echo "   ./start-prod.sh"
+fi
