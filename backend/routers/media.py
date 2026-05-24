@@ -10,10 +10,15 @@ from datetime import datetime
 
 from database import get_db
 from models import MediaFile
-from thumbnails import generate_thumbnail, get_thumbnail_path
+from thumbnails import enqueue_thumbnail, get_thumbnail_path
 import os
 
 router = APIRouter(prefix="/api/media", tags=["media"])
+
+SVG_PLACEHOLDER = b"""<svg width="320" height="320" xmlns="http://www.w3.org/2000/svg">
+  <rect width="320" height="320" fill="#1f2937"/>
+  <text x="50%" y="50%" font-family="system-ui, sans-serif" font-size="14" fill="#9ca3af" text-anchor="middle" dominant-baseline="middle">Generating...</text>
+</svg>"""
 
 
 @router.get("/timeline")
@@ -100,20 +105,12 @@ def get_thumbnail(media_id: str, db: Session = Depends(get_db)):
     if os.path.exists(thumb_path):
         return FileResponse(thumb_path, media_type="image/webp")
 
-    # Generate on-the-fly
-    result = generate_thumbnail(item.path)
-    if result and os.path.exists(result):
-        # Update DB
-        item.has_thumbnail = True
-        item.thumbnail_path = result
-        db.commit()
-        return FileResponse(result, media_type="image/webp")
-
-    # Fallback: serve original (only for images)
-    if item.media_type == "image" and os.path.exists(item.path):
-        return FileResponse(item.path)
-
-    raise HTTPException(status_code=404, detail="Thumbnail not available")
+    # Enqueue on-the-fly generation asynchronously
+    enqueue_thumbnail(item.path)
+    
+    # Return an SVG placeholder so frontend doesn't hang
+    from fastapi.responses import Response
+    return Response(content=SVG_PLACEHOLDER, media_type="image/svg+xml")
 
 
 @router.get("/file/{media_id}")

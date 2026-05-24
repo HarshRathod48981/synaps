@@ -134,11 +134,14 @@ def get_best_date(filepath: str, filename: str) -> datetime:
     # Fallback to filesystem modification time
     try:
         stat = os.stat(filepath)
-        # Use birth time on macOS, modification time on Linux
+        # Use modification time (st_mtime) first, as it's the actual photo date on this NAS
+        if hasattr(stat, 'st_mtime'):
+            return datetime.fromtimestamp(stat.st_mtime)
+        # Fallback to birthtime if mtime is somehow not available
         birth = getattr(stat, 'st_birthtime', None)
         if birth:
             return datetime.fromtimestamp(birth)
-        return datetime.fromtimestamp(stat.st_mtime)
+        return datetime.fromtimestamp(stat.st_ctime)
     except OSError:
         return datetime.now()
 
@@ -175,7 +178,7 @@ def scan_directory(db: Session, force_rescan: bool = False) -> dict:
             batch = []
 
             for filename in files:
-                if filename.startswith('.'):
+                if filename.startswith('.') or filename.lower().endswith('.aae') or filename.lower().endswith('.tmp'):
                     continue
 
                 ext = os.path.splitext(filename)[1].lower()

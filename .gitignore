@@ -1,29 +1,66 @@
-# Dependencies
+# ========================
+# Synaps .gitignore
+# ========================
+
+# 1. Source Code Dependencies & Environments
 node_modules/
 backend/venv/
-__pycache__/
-*.pyc
+env/
+venv/
+.env
+.env.*
+!.env.example
 
-# Build
+# 2. Python Cache & Build
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+dist/
+*.egg-info/
+*.egg
+
+# 3. Next.js Build & Cache
 .next/
 out/
-dist/
+next-env.d.ts
 
-# Database
+# 4. Database & Indexes
 *.db
+*.sqlite
+*.sqlite3
 *.db-journal
 
-# Cache
+# 5. Media, Uploads, Thumbnails & Cache
+mock_storage/
+iphone/
 backend/thumbnails/
 backend/trash/
+uploaded_media/
+thumbnails/
+trash/
+cache/
+.cache/
 
-# Environment
-.env.local
-.env.production
-
-# IDE
-.vscode/
-.idea/
+# 6. Logs & Temp Files
+*.log
+logs/
+tmp/
+temp/
+.tmp/
+*.tmp
 *.swp
 *.swo
+*~
+
+# 7. IDE & OS Files
+.vscode/
+.idea/
 .DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.Spotlight-V100
+.Trashes

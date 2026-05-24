@@ -143,31 +143,58 @@ def generate_pdf_thumbnail(source_path: str, thumb_path: str) -> bool:
         return False
 
 
-def generate_thumbnail(source_path: str) -> str | None:
-    """Generate a thumbnail for any media file. Returns thumbnail path or None.
-    Lazy: only generates when called, result is cached on disk."""
+import queue
+import threading
+
+# Setup background worker queue
+thumbnail_queue = queue.Queue()
+
+def _thumbnail_worker():
+    """Background worker that continuously processes the thumbnail queue."""
+    while True:
+        try:
+            item = thumbnail_queue.get()
+            if item is None:
+                break
+            
+            source_path, thumb_path = item
+            
+            if not os.path.exists(thumb_path):
+                ext = os.path.splitext(source_path)[1].lower()
+                success = False
+                if ext in VIDEO_EXTENSIONS:
+                    success = generate_video_thumbnail(source_path, thumb_path)
+                elif ext in PDF_EXTENSIONS:
+                    success = generate_pdf_thumbnail(source_path, thumb_path)
+                else:
+                    success = generate_image_thumbnail(source_path, thumb_path)
+                
+                if success:
+                    logger.debug(f"Generated thumbnail: {os.path.basename(source_path)}")
+            
+            thumbnail_queue.task_done()
+        except Exception as e:
+            logger.error(f"Thumbnail worker error: {e}")
+            if 'item' in locals() and hasattr(item, '__len__') and len(item) == 2:
+                thumbnail_queue.task_done()
+
+# Start worker thread
+worker_thread = threading.Thread(target=_thumbnail_worker, daemon=True)
+worker_thread.start()
+
+def enqueue_thumbnail(source_path: str) -> str:
+    """Enqueue a thumbnail for background generation and return its expected path."""
     ensure_thumbnail_dir()
-
     thumb_path = get_thumbnail_path(source_path)
+    
+    if not os.path.exists(thumb_path):
+        thumbnail_queue.put((source_path, thumb_path))
+        
+    return thumb_path
 
-    # Return cached thumbnail if exists
-    if os.path.exists(thumb_path):
-        return thumb_path
-
-    ext = os.path.splitext(source_path)[1].lower()
-
-    success = False
-    if ext in VIDEO_EXTENSIONS:
-        success = generate_video_thumbnail(source_path, thumb_path)
-    elif ext in PDF_EXTENSIONS:
-        success = generate_pdf_thumbnail(source_path, thumb_path)
-    else:
-        # Images (including HEIC if pillow-heif is installed)
-        success = generate_image_thumbnail(source_path, thumb_path)
-
-    if success:
-        logger.debug(f"Generated thumbnail: {os.path.basename(source_path)}")
-    return thumb_path if success else None
+def generate_thumbnail(source_path: str) -> str | None:
+    """Legacy synchronous call, kept for backward compatibility if needed."""
+    return enqueue_thumbnail(source_path)
 
 
 def batch_generate_thumbnails(file_paths: list[str], db_session=None) -> dict:

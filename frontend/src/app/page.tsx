@@ -25,8 +25,6 @@ export default function TimelinePage() {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const { activeFilter } = useAppStore();
   const observerRef = useRef<HTMLDivElement>(null);
-  // Track loaded item IDs globally to prevent duplicates
-  const loadedIdsRef = useRef<Set<string>>(new Set());
 
   const fetchPage = useCallback(async (pageNum: number, reset: boolean = false) => {
     if (reset) {
@@ -43,35 +41,22 @@ export default function TimelinePage() {
 
       if (reset) {
         // Fresh load — replace all data
-        loadedIdsRef.current = new Set();
-        const newGroups: TimelineGroup[] = [];
-        for (const group of data.groups) {
-          const dedupedItems = group.items.filter((item: any) => {
-            if (loadedIdsRef.current.has(item.id)) return false;
-            loadedIdsRef.current.add(item.id);
-            return true;
-          });
-          if (dedupedItems.length > 0) {
-            newGroups.push({ ...group, items: dedupedItems });
-          }
-        }
-        setGroups(newGroups);
+        setGroups(data.groups);
       } else {
-        // Append — merge into existing groups, dedup by ID
+        // Append — merge into existing groups, dedup by ID safely
         setGroups(prev => {
           const merged = prev.map(g => ({ ...g, items: [...g.items] }));
+          
           for (const group of data.groups) {
             const key = `${group.year}-${group.month}`;
             const existing = merged.find(g => `${g.year}-${g.month}` === key);
-            const newItems = group.items.filter((item: any) => {
-              if (loadedIdsRef.current.has(item.id)) return false;
-              loadedIdsRef.current.add(item.id);
-              return true;
-            });
+            
             if (existing) {
+              const existingIds = new Set(existing.items.map((i: any) => i.id));
+              const newItems = group.items.filter((item: any) => !existingIds.has(item.id));
               existing.items.push(...newItems);
-            } else if (newItems.length > 0) {
-              merged.push({ ...group, items: newItems });
+            } else if (group.items.length > 0) {
+              merged.push({ ...group });
             }
           }
           // Sort groups descending by date
@@ -167,7 +152,7 @@ export default function TimelinePage() {
             const collapsed = collapsedGroups.has(key);
 
             return (
-              <section key={key}>
+              <section key={key} style={{ contentVisibility: 'auto' }}>
                 {/* Sticky month header */}
                 <button
                   onClick={() => toggleGroup(key)}
