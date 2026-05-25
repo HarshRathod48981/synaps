@@ -12,6 +12,10 @@ from database import get_db
 from models import MediaFile
 from thumbnails import enqueue_thumbnail, get_thumbnail_path
 import os
+import mimetypes
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/media", tags=["media"])
 
@@ -120,8 +124,30 @@ def get_file(media_id: str, db: Session = Depends(get_db)):
     if not item:
         raise HTTPException(status_code=404, detail="Media not found")
     if not os.path.exists(item.path):
+        logger.error(f"Failed to serve file - not found on disk: {item.path}")
         raise HTTPException(status_code=404, detail="File not found on disk")
-    return FileResponse(item.path, media_type=item.mime_type, filename=item.filename)
+
+    # Resolve correct MIME type to prevent browser rendering issues (especially with uppercase .JPG)
+    mime_type = item.mime_type
+    if not mime_type or mime_type == "application/octet-stream":
+        # Force lowercase for reliable guessing
+        mime_type, _ = mimetypes.guess_type(item.filename.lower())
+        if not mime_type:
+            ext = item.extension.lower() if item.extension else ""
+            if ext in [".jpg", ".jpeg"]:
+                mime_type = "image/jpeg"
+            elif ext == ".png":
+                mime_type = "image/png"
+            elif ext == ".heic":
+                mime_type = "image/heic"
+            elif ext == ".mp4":
+                mime_type = "video/mp4"
+            elif ext == ".mov":
+                mime_type = "video/quicktime"
+            else:
+                mime_type = "application/octet-stream"
+
+    return FileResponse(item.path, media_type=mime_type, filename=item.filename)
 
 
 @router.get("/stream/{media_id}")

@@ -15,11 +15,14 @@ export function MediaViewer() {
   const [loading, setLoading] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
     if (viewerMediaId) {
       setLoading(true);
       setZoom(1);
+      setShowInfo(false); // Reset info panel state on new image
+      setImageError(false); // Reset error state on new image
       getMediaItem(viewerMediaId)
         .then(setMedia)
         .catch(console.error)
@@ -29,10 +32,17 @@ export function MediaViewer() {
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (!viewerOpen) return;
-    if (e.key === 'Escape') closeViewer();
+    if (e.key === 'Escape') {
+      // If info panel is open, close it first. Otherwise close the whole viewer.
+      if (showInfo) {
+        setShowInfo(false);
+      } else {
+        closeViewer();
+      }
+    }
     if (e.key === '+' || e.key === '=') setZoom((z) => Math.min(z + 0.25, 5));
     if (e.key === '-') setZoom((z) => Math.max(z - 0.25, 0.5));
-  }, [viewerOpen, closeViewer]);
+  }, [viewerOpen, closeViewer, showInfo]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
@@ -118,17 +128,34 @@ export function MediaViewer() {
               style={{ transform: `scale(${zoom})` }}
             />
           ) : media?.media_type === 'image' ? (
-            <motion.img
-              src={getFileUrl(media.id)}
-              alt={media.filename}
-              className="max-w-full max-h-full object-contain transition-transform duration-200"
-              style={{ transform: `scale(${zoom})` }}
-              draggable={false}
-            />
+            imageError ? (
+              <div className="flex flex-col items-center gap-3 text-white/50">
+                <Info size={48} className="opacity-50" />
+                <p>Failed to load image</p>
+                <p className="text-xs opacity-70">{media.filename}</p>
+              </div>
+            ) : (
+              <motion.img
+                src={getFileUrl(media.id)}
+                alt={media.filename}
+                className="max-w-full max-h-full object-contain transition-transform duration-200"
+                style={{ transform: `scale(${zoom})` }}
+                draggable={false}
+                onError={() => setImageError(true)}
+              />
+            )
           ) : (
             <div className="text-white/50 text-sm">Preview not available</div>
           )}
         </div>
+
+        {/* Invisible overlay to close info panel when clicking outside */}
+        {showInfo && (
+          <div 
+            className="absolute inset-0 z-10" 
+            onClick={() => setShowInfo(false)} 
+          />
+        )}
 
         {/* Info panel */}
         <AnimatePresence>
@@ -137,7 +164,7 @@ export function MediaViewer() {
               initial={{ x: 300 }}
               animate={{ x: 0 }}
               exit={{ x: 300 }}
-              className="absolute right-0 top-0 bottom-0 w-72 bg-black/80 backdrop-blur-2xl border-l border-white/10 p-5 overflow-y-auto"
+              className="absolute right-0 top-0 bottom-0 w-72 bg-black/80 backdrop-blur-2xl border-l border-white/10 p-5 overflow-y-auto z-20"
             >
               <h3 className="text-sm font-semibold text-white mb-4">Details</h3>
               <div className="space-y-3 text-xs">
