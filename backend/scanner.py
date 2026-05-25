@@ -5,6 +5,7 @@ Designed for low-power hardware with batch processing.
 import os
 import hashlib
 import mimetypes
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -13,10 +14,12 @@ from sqlalchemy.orm import Session
 
 from config import (
     STORAGE_PATH, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS,
-    DOCUMENT_EXTENSIONS, RAW_EXTENSIONS, ALL_EXTENSIONS,
-    SCAN_BATCH_SIZE
+    DOCUMENT_EXTENSIONS, RAW_EXTENSIONS, ALL_MEDIA_EXTENSIONS,
+    SCAN_BATCH_SIZE, ALLOWED_SCAN_PATHS
 )
 from models import MediaFile
+
+logger = logging.getLogger("synaps.scanner")
 
 # Try to import exifread for EXIF metadata
 try:
@@ -24,6 +27,7 @@ try:
     HAS_EXIFREAD = True
 except ImportError:
     HAS_EXIFREAD = False
+    logger.warning("exifread not installed — EXIF date extraction disabled")
 
 
 def classify_media(ext: str, filename: str) -> dict:
@@ -78,6 +82,11 @@ def extract_exif_date(filepath: str) -> Optional[datetime]:
     if not HAS_EXIFREAD:
         return None
 
+    # Only attempt EXIF on formats that support it
+    ext = os.path.splitext(filepath)[1].lower()
+    if ext not in {'.jpg', '.jpeg', '.tiff', '.heic', '.heif', '.raw', '.cr2', '.nef', '.arw', '.dng'}:
+        return None
+
     try:
         with open(filepath, "rb") as f:
             tags = exifread.process_file(f, stop_tag="DateTimeOriginal", details=False)
@@ -122,96 +131,118 @@ def get_best_date(filepath: str, filename: str) -> datetime:
     if fn_date:
         return fn_date
 
-    # Fallback to filesystem
+    # Fallback to filesystem modification time
     try:
         stat = os.stat(filepath)
-        # Use birth time on macOS, modification time on Linux
+        # Use modification time (st_mtime) first, as it's the actual photo date on this NAS
+        if hasattr(stat, 'st_mtime'):
+            return datetime.fromtimestamp(stat.st_mtime)
+        # Fallback to birthtime if mtime is somehow not available
         birth = getattr(stat, 'st_birthtime', None)
         if birth:
             return datetime.fromtimestamp(birth)
-        return datetime.fromtimestamp(stat.st_mtime)
+        return datetime.fromtimestamp(stat.st_ctime)
     except OSError:
         return datetime.now()
 
 
-def scan_directory(db: Session, base_path: str = None, force_rescan: bool = False) -> dict:
+def scan_directory(db: Session, force_rescan: bool = False) -> dict:
     """
-    Scan the storage directory and index all media files.
-    Returns scan statistics.
+    Scan the whitelisted storage directories and index all media files.
+    Only indexes photos and videos (not documents) for the timeline.
+    Optimized for low-power NAS with batch processing.
     """
-    if base_path is None:
-        base_path = STORAGE_PATH
-
     stats = {"scanned": 0, "new": 0, "skipped": 0, "errors": 0}
 
-    for root, dirs, files in os.walk(base_path):
-        # Skip hidden directories and thumbnail cache
-        dirs[:] = [d for d in dirs if not d.startswith('.') and d != 'thumbnails' and d != 'trash' and d != 'venv']
+    # Pre-fetch all existing paths into memory for fast lookups
+    existing_paths = set()
+    if not force_rescan:
+        for (path,) in db.query(MediaFile.path).all():
+            existing_paths.add(path)
+        logger.info(f"Loaded {len(existing_paths)} existing paths from DB")
 
-        batch = []
+    for base_path in ALLOWED_SCAN_PATHS:
+        if not os.path.exists(base_path):
+            logger.warning(f"Allowed path does not exist: {base_path}")
+            continue
 
-        for filename in files:
-            if filename.startswith('.'):
-                continue
+        logger.info(f"Scanning: {base_path}")
 
-            ext = os.path.splitext(filename)[1].lower()
-            if ext not in ALL_EXTENSIONS:
-                continue
+        for root, dirs, files in os.walk(base_path):
+            # Skip hidden directories and system dirs
+            dirs[:] = [d for d in dirs if not d.startswith('.') and d not in {
+                'thumbnails', 'trash', 'venv', '__pycache__',
+                'node_modules', '.git'
+            }]
 
-            filepath = os.path.join(root, filename)
-            relative_path = os.path.relpath(filepath, base_path)
-            stats["scanned"] += 1
+            batch = []
 
-            # Check if already indexed
-            if not force_rescan:
-                existing = db.query(MediaFile).filter(MediaFile.path == filepath).first()
-                if existing:
+            for filename in files:
+                if filename.startswith('.') or filename.lower().endswith('.aae') or filename.lower().endswith('.tmp'):
+                    continue
+
+                ext = os.path.splitext(filename)[1].lower()
+                # Only index media files (photos + videos) for timeline
+                if ext not in ALL_MEDIA_EXTENSIONS:
+                    continue
+
+                filepath = os.path.join(root, filename)
+                relative_path = os.path.relpath(filepath, STORAGE_PATH)
+                stats["scanned"] += 1
+
+                # Fast memory lookup instead of DB query per file
+                if not force_rescan and filepath in existing_paths:
                     stats["skipped"] += 1
                     continue
 
-            try:
-                file_stat = os.stat(filepath)
-                classification = classify_media(ext, filename)
-                date_taken = get_best_date(filepath, filename)
-                file_hash = compute_file_hash(filepath)
+                try:
+                    file_stat = os.stat(filepath)
+                    classification = classify_media(ext, filename)
+                    date_taken = get_best_date(filepath, filename)
+                    file_hash = compute_file_hash(filepath)
 
-                mime_type, _ = mimetypes.guess_type(filepath)
+                    mime_type, _ = mimetypes.guess_type(filepath)
 
-                media_file = MediaFile(
-                    filename=filename,
-                    path=filepath,
-                    relative_path=relative_path,
-                    directory=os.path.relpath(root, base_path),
-                    extension=ext,
-                    mime_type=mime_type or "application/octet-stream",
-                    file_size=file_stat.st_size,
-                    media_type=classification["media_type"],
-                    is_screenshot=classification["is_screenshot"],
-                    is_screen_recording=classification["is_screen_recording"],
-                    is_raw=classification["is_raw"],
-                    date_taken=date_taken,
-                    date_created=datetime.fromtimestamp(getattr(file_stat, 'st_birthtime', file_stat.st_ctime)),
-                    date_modified=datetime.fromtimestamp(file_stat.st_mtime),
-                    file_hash=file_hash,
-                )
+                    media_file = MediaFile(
+                        filename=filename,
+                        path=filepath,
+                        relative_path=relative_path,
+                        directory=os.path.relpath(root, STORAGE_PATH),
+                        extension=ext,
+                        mime_type=mime_type or "application/octet-stream",
+                        file_size=file_stat.st_size,
+                        media_type=classification["media_type"],
+                        is_screenshot=classification["is_screenshot"],
+                        is_screen_recording=classification["is_screen_recording"],
+                        is_raw=classification["is_raw"],
+                        date_taken=date_taken,
+                        date_created=datetime.fromtimestamp(
+                            getattr(file_stat, 'st_birthtime', file_stat.st_ctime)
+                        ),
+                        date_modified=datetime.fromtimestamp(file_stat.st_mtime),
+                        file_hash=file_hash,
+                    )
 
-                batch.append(media_file)
-                stats["new"] += 1
+                    batch.append(media_file)
+                    stats["new"] += 1
 
-                # Commit in batches
-                if len(batch) >= SCAN_BATCH_SIZE:
-                    db.add_all(batch)
-                    db.commit()
-                    batch = []
+                    # Commit in batches to limit memory usage
+                    if len(batch) >= SCAN_BATCH_SIZE:
+                        db.add_all(batch)
+                        db.commit()
+                        logger.info(f"  Committed batch of {len(batch)} files")
+                        batch = []
 
-            except Exception as e:
-                stats["errors"] += 1
-                print(f"Error scanning {filepath}: {e}")
-                continue
+                except Exception as e:
+                    stats["errors"] += 1
+                    logger.error(f"Error scanning {filepath}: {e}")
+                    continue
 
-        # Commit remaining batch
-        if batch:
-            db.add_all(batch)
-            db.commit()
+            # Commit remaining batch for this directory
+            if batch:
+                db.add_all(batch)
+                db.commit()
+                logger.info(f"  Committed final batch of {len(batch)} files from {root}")
 
+    logger.info(f"Scan complete: {stats}")
     return stats

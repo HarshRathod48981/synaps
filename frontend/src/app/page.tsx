@@ -6,7 +6,7 @@ import { TopBar } from '@/components/TopBar';
 import { MediaGrid } from '@/components/MediaGrid';
 import { useAppStore } from '@/lib/store';
 import { getTimeline, getMediaStats } from '@/lib/api';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 
 interface TimelineGroup {
   year: number;
@@ -18,6 +18,7 @@ interface TimelineGroup {
 export default function TimelinePage() {
   const [groups, setGroups] = useState<TimelineGroup[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [stats, setStats] = useState<any>(null);
@@ -25,59 +26,79 @@ export default function TimelinePage() {
   const { activeFilter } = useAppStore();
   const observerRef = useRef<HTMLDivElement>(null);
 
-  const fetchData = useCallback(async (pageNum: number, reset: boolean = false) => {
-    try {
+  const fetchPage = useCallback(async (pageNum: number, reset: boolean = false) => {
+    if (reset) {
       setLoading(true);
-      const params: any = { page: pageNum, per_page: 60 };
+    } else {
+      setLoadingMore(true);
+    }
+
+    try {
+      const params: any = { page: pageNum, per_page: 80 };
       if (activeFilter) params.media_type = activeFilter;
-      
+
       const data = await getTimeline(params);
-      
+
       if (reset) {
+        // Fresh load — replace all data
         setGroups(data.groups);
       } else {
+        // Append — merge into existing groups, dedup by ID safely
         setGroups(prev => {
-          const merged = [...prev];
+          const merged = prev.map(g => ({ ...g, items: [...g.items] }));
+          
           for (const group of data.groups) {
             const key = `${group.year}-${group.month}`;
             const existing = merged.find(g => `${g.year}-${g.month}` === key);
+            
             if (existing) {
               const existingIds = new Set(existing.items.map((i: any) => i.id));
-              existing.items.push(...group.items.filter((i: any) => !existingIds.has(i.id)));
-            } else {
-              merged.push(group);
+              const newItems = group.items.filter((item: any) => !existingIds.has(item.id));
+              existing.items.push(...newItems);
+            } else if (group.items.length > 0) {
+              merged.push({ ...group });
             }
           }
+          // Sort groups descending by date
+          merged.sort((a, b) => {
+            if (a.year !== b.year) return b.year - a.year;
+            return b.month - a.month;
+          });
           return merged;
         });
       }
-      
+
       setHasMore(pageNum < data.total_pages);
     } catch (error) {
       console.error('Failed to fetch timeline:', error);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   }, [activeFilter]);
 
+  // Reset when filter changes
   useEffect(() => {
     setPage(1);
     setGroups([]);
-    fetchData(1, true);
-  }, [activeFilter, fetchData]);
+    setHasMore(true);
+    fetchPage(1, true);
+  }, [activeFilter]); // intentionally exclude fetchPage to avoid loops
 
   useEffect(() => {
     getMediaStats().then(setStats).catch(console.error);
   }, []);
 
-  // Infinite scroll
+  // Infinite scroll with debounce guard
   useEffect(() => {
+    if (!observerRef.current) return;
+
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && hasMore && !loading) {
-          setPage(p => {
-            const next = p + 1;
-            fetchData(next);
+        if (entries[0].isIntersecting && hasMore && !loading && !loadingMore) {
+          setPage(prev => {
+            const next = prev + 1;
+            fetchPage(next);
             return next;
           });
         }
@@ -85,9 +106,9 @@ export default function TimelinePage() {
       { threshold: 0.1 }
     );
 
-    if (observerRef.current) observer.observe(observerRef.current);
+    observer.observe(observerRef.current);
     return () => observer.disconnect();
-  }, [hasMore, loading, fetchData]);
+  }, [hasMore, loading, loadingMore, fetchPage]);
 
   const toggleGroup = (key: string) => {
     setCollapsedGroups(prev => {
@@ -131,13 +152,8 @@ export default function TimelinePage() {
             const collapsed = collapsedGroups.has(key);
 
             return (
-              <motion.section
-                key={key}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
-              >
-                {/* Month header */}
+              <section key={key} style={{ contentVisibility: 'auto' }}>
+                {/* Sticky month header */}
                 <button
                   onClick={() => toggleGroup(key)}
                   className="month-header flex items-center gap-2 group w-full text-left
@@ -157,23 +173,17 @@ export default function TimelinePage() {
                   </span>
                 </button>
 
-                {/* Media grid */}
+                {/* Media grid — simply show/hide, no animation to prevent re-render issues */}
                 {!collapsed && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    <MediaGrid items={group.items} />
-                  </motion.div>
+                  <MediaGrid items={group.items} />
                 )}
-              </motion.section>
+              </section>
             );
           })}
         </div>
 
         {/* Loading indicator */}
-        {loading && (
+        {(loading || loadingMore) && (
           <div className="flex justify-center py-8">
             <div className="w-8 h-8 rounded-full border-2 border-synaps-500/20 border-t-synaps-500 animate-spin" />
           </div>

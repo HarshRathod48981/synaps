@@ -2,41 +2,35 @@
 Synaps — Personal NAS Media OS
 Main FastAPI application entry point.
 """
-from fastapi import FastAPI, BackgroundTasks
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import os
 import threading
+import logging
 
 from database import init_db, SessionLocal
 from scanner import scan_directory
-from thumbnails import batch_generate_thumbnails
 from config import HOST, PORT, THUMBNAIL_DIR, TRASH_DIR
-from models import MediaFile
+
+# Configure structured logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
+logger = logging.getLogger("synaps")
 
 
 def run_initial_scan():
     """Run initial scan in a background thread."""
     db = SessionLocal()
     try:
-        print("[Synaps] Starting initial media scan...")
+        logger.info("Starting initial media scan...")
         stats = scan_directory(db)
-        print(f"[Synaps] Scan complete: {stats}")
-
-        # Generate thumbnails for images without them
-        files = db.query(MediaFile).filter(
-            MediaFile.has_thumbnail == False,
-            MediaFile.media_type == "image"
-        ).all()
-
-        if files:
-            paths = [f.path for f in files]
-            print(f"[Synaps] Generating thumbnails for {len(paths)} files...")
-            thumb_stats = batch_generate_thumbnails(paths, db)
-            print(f"[Synaps] Thumbnails: {thumb_stats}")
+        logger.info(f"Scan complete: {stats}")
     except Exception as e:
-        print(f"[Synaps] Scan error: {e}")
+        logger.error(f"Scan error: {e}", exc_info=True)
     finally:
         db.close()
 
@@ -62,7 +56,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS - allow frontend dev server
+# CORS - allow frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
