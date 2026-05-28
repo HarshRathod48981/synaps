@@ -90,13 +90,36 @@ def compute_file_hash(filepath: str, chunk_size: int = 8192) -> str:
 
 
 def extract_exif_date(filepath: str) -> Optional[datetime]:
-    """Extract date taken from EXIF data."""
+    """Extract date taken from EXIF data.
+    Uses exifread for JPEG/TIFF, and PIL+pillow_heif for HEIC files
+    (exifread cannot read HEIC EXIF data)."""
+
+    ext = os.path.splitext(filepath)[1].lower()
+
+    # ── HEIC/HEIF: use PIL (with pillow-heif registered) ──
+    if ext in {'.heic', '.heif'}:
+        try:
+            from PIL import Image
+            from PIL.ExifTags import Base as ExifBase
+            import pillow_heif
+            pillow_heif.register_heif_opener()
+
+            with Image.open(filepath) as img:
+                exif_data = img.getexif()
+                if exif_data:
+                    # Tag 36867 = DateTimeOriginal, 306 = DateTime
+                    date_str = exif_data.get(36867) or exif_data.get(306)
+                    if date_str:
+                        return datetime.strptime(date_str, "%Y:%m:%d %H:%M:%S")
+        except Exception:
+            pass
+        return None
+
+    # ── JPEG/TIFF/RAW: use exifread ──
     if not HAS_EXIFREAD:
         return None
 
-    # Only attempt EXIF on formats that support it
-    ext = os.path.splitext(filepath)[1].lower()
-    if ext not in {'.jpg', '.jpeg', '.tiff', '.heic', '.heif', '.raw', '.cr2', '.nef', '.arw', '.dng'}:
+    if ext not in {'.jpg', '.jpeg', '.tiff', '.raw', '.cr2', '.nef', '.arw', '.dng'}:
         return None
 
     try:
@@ -108,6 +131,38 @@ def extract_exif_date(filepath: str) -> Optional[datetime]:
             date_str = str(date_tag)
             return datetime.strptime(date_str, "%Y:%m:%d %H:%M:%S")
     except Exception:
+        pass
+    return None
+
+
+def extract_video_date(filepath: str) -> Optional[datetime]:
+    """Extract creation date from video metadata using ffprobe.
+    MP4/MOV files store creation_time in their container metadata."""
+    import subprocess
+
+    ext = os.path.splitext(filepath)[1].lower()
+    if ext not in {'.mp4', '.mov', '.m4v'}:
+        return None
+
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "quiet",
+                "-print_format", "json",
+                "-show_entries", "format_tags=creation_time",
+                filepath
+            ],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode == 0:
+            import json
+            data = json.loads(result.stdout)
+            creation_time = data.get("format", {}).get("tags", {}).get("creation_time")
+            if creation_time:
+                # Format: "2025-03-15T10:30:45.000000Z"
+                clean = creation_time.replace("Z", "").split(".")[0]
+                return datetime.strptime(clean, "%Y-%m-%dT%H:%M:%S")
+    except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
         pass
     return None
 
@@ -132,13 +187,19 @@ def extract_date_from_filename(filename: str) -> Optional[datetime]:
 
 
 def get_best_date(filepath: str, filename: str) -> datetime:
-    """Get the best available date for a file. Priority: EXIF > filename > filesystem."""
-    # Try EXIF
+    """Get the best available date for a file.
+    Priority: EXIF > video metadata > filename > filesystem."""
+    # 1. Try EXIF (images)
     exif_date = extract_exif_date(filepath)
     if exif_date:
         return exif_date
 
-    # Try filename parsing
+    # 2. Try video container metadata (MP4/MOV)
+    video_date = extract_video_date(filepath)
+    if video_date:
+        return video_date
+
+    # 3. Try filename parsing
     fn_date = extract_date_from_filename(filename)
     if fn_date:
         return fn_date

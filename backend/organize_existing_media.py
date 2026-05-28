@@ -40,7 +40,7 @@ from pathlib import Path
 # We import directly to guarantee identical date logic.
 
 from config import ALLOWED_SCAN_PATHS, ALL_MEDIA_EXTENSIONS, STORAGE_PATH
-from scanner import get_best_date, extract_exif_date, extract_date_from_filename
+from scanner import get_best_date, extract_exif_date, extract_date_from_filename, extract_video_date
 from database import SessionLocal
 from models import MediaFile
 
@@ -87,21 +87,27 @@ def setup_logging(verbose: bool = False):
 def detect_date_source(filepath: str, filename: str) -> tuple[datetime | None, str]:
     """
     Detect the best date using the SAME priority as Synaps scanner:
-        1. EXIF DateTimeOriginal
-        2. Filename pattern (YYYYMMDD)
-        3. Filesystem modification time
+        1. EXIF DateTimeOriginal (images)
+        2. Video container metadata via ffprobe (MP4/MOV)
+        3. Filename pattern (YYYYMMDD)
+        4. Filesystem dates (oldest of birthtime/mtime/ctime)
 
     Returns (date, source_description) for logging.
     """
-    # 1. EXIF
+    # 1. EXIF (images — JPEG via exifread, HEIC via PIL+pillow_heif)
     exif_date = extract_exif_date(filepath)
     if exif_date:
         return exif_date, "EXIF DateTimeOriginal"
 
-    # 2. Filename
+    # 2. Video metadata (MP4/MOV creation_time via ffprobe)
+    video_date = extract_video_date(filepath)
+    if video_date:
+        return video_date, "Video creation_time"
+
+    # 3. Filename
     fn_date = extract_date_from_filename(filename)
     if fn_date:
-        return fn_date, f"Filename pattern"
+        return fn_date, "Filename pattern"
 
     # 3. Filesystem dates — prefer birthtime (creation) over mtime (modified)
     # When files are copied/imported, mtime gets reset to copy date.
