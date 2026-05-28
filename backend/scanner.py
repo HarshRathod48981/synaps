@@ -143,19 +143,37 @@ def get_best_date(filepath: str, filename: str) -> datetime:
     if fn_date:
         return fn_date
 
-    # Fallback to filesystem modification time
+    # Fallback to filesystem dates
+    # Priority: birthtime (original creation) > mtime (last modified)
+    # Why: When files are copied/transferred between devices, mtime is reset
+    # to the copy date. birthtime preserves the original creation timestamp
+    # on macOS (HFS+/APFS) and some NAS filesystems.
     try:
         stat = os.stat(filepath)
-        # Use modification time (st_mtime) first, as it's the actual photo date on this NAS
-        if hasattr(stat, 'st_mtime'):
-            return datetime.fromtimestamp(stat.st_mtime)
-        # Fallback to birthtime if mtime is somehow not available
+        candidates = []
+
+        # Prefer birthtime (original creation date, survives copies)
         birth = getattr(stat, 'st_birthtime', None)
         if birth:
-            return datetime.fromtimestamp(birth)
-        return datetime.fromtimestamp(stat.st_ctime)
+            candidates.append(datetime.fromtimestamp(birth))
+
+        # mtime as secondary (unreliable for copied/imported media)
+        if hasattr(stat, 'st_mtime'):
+            candidates.append(datetime.fromtimestamp(stat.st_mtime))
+
+        # ctime as last resort
+        candidates.append(datetime.fromtimestamp(stat.st_ctime))
+
+        # Pick the OLDEST valid date (most likely to be the real capture date)
+        # Reject dates in the future
+        now = datetime.now()
+        valid = [d for d in candidates if d <= now]
+        if valid:
+            return min(valid)
+
     except OSError:
-        return datetime.now()
+        pass
+    return datetime.now()
 
 
 def scan_directory(db: Session, force_rescan: bool = False) -> dict:

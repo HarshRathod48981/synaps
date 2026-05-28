@@ -103,13 +103,28 @@ def detect_date_source(filepath: str, filename: str) -> tuple[datetime | None, s
     if fn_date:
         return fn_date, f"Filename pattern"
 
-    # 3. Filesystem mtime
+    # 3. Filesystem dates — prefer birthtime (creation) over mtime (modified)
+    # When files are copied/imported, mtime gets reset to copy date.
+    # birthtime preserves original creation date on macOS/HFS+/APFS.
     try:
         stat = os.stat(filepath)
-        mtime = datetime.fromtimestamp(stat.st_mtime)
-        # Sanity check: reject dates before 2000 or in the future
-        if 2000 <= mtime.year <= datetime.now().year + 1:
-            return mtime, "Filesystem mtime"
+        candidates = []
+
+        birth = getattr(stat, 'st_birthtime', None)
+        if birth:
+            candidates.append(("Filesystem birthtime", datetime.fromtimestamp(birth)))
+
+        if hasattr(stat, 'st_mtime'):
+            candidates.append(("Filesystem mtime", datetime.fromtimestamp(stat.st_mtime)))
+
+        candidates.append(("Filesystem ctime", datetime.fromtimestamp(stat.st_ctime)))
+
+        # Pick the oldest valid date (most likely the real capture date)
+        now = datetime.now()
+        valid = [(src, d) for src, d in candidates if d <= now]
+        if valid:
+            best_src, best_date = min(valid, key=lambda x: x[1])
+            return best_date, best_src
     except OSError:
         pass
 
