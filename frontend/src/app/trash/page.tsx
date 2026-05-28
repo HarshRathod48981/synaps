@@ -55,7 +55,20 @@ export default function TrashPage() {
                   bg-gray-50 dark:bg-white/[0.03]
                   border border-gray-100 dark:border-white/[0.04]"
               >
-                <Trash2 size={18} className="text-red-400/70 shrink-0" />
+                {item.thumbnail_url ? (
+                  <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800 shrink-0 border border-gray-200 dark:border-white/[0.05]">
+                    <img
+                      src={item.thumbnail_url}
+                      alt={item.filename}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                  </div>
+                ) : (
+                  <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">
+                    <Trash2 size={18} className="text-red-400/70" />
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-gray-900 dark:text-gray-100 truncate">{item.filename}</p>
                   <div className="flex items-center gap-2 mt-0.5">

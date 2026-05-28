@@ -10,6 +10,9 @@ import shutil
 from database import get_db
 from models import MediaFile, TrashItem
 from config import TRASH_DIR, TRASH_RETENTION_DAYS
+from thumbnails import get_thumbnail_path
+from fastapi.responses import FileResponse, Response
+from routers.media import SVG_PLACEHOLDER
 
 router = APIRouter(prefix="/api/trash", tags=["trash"])
 
@@ -60,15 +63,34 @@ def list_trash(db: Session = Depends(get_db)):
                 "deleted_at": i.deleted_at.isoformat() if i.deleted_at else None,
                 "auto_delete_at": i.auto_delete_at.isoformat() if i.auto_delete_at else None,
                 "days_remaining": max(0, (i.auto_delete_at - datetime.now()).days) if i.auto_delete_at else 0,
+                "thumbnail_url": f"/api/trash/thumbnail/{i.id}"
             }
             for i in items
         ],
     }
 
 
+@router.get("/thumbnail/{trash_id}")
+def get_trash_thumbnail(trash_id: str, db: Session = Depends(get_db)):
+    """Get the cached thumbnail for a trash item."""
+    item = db.query(TrashItem).filter(TrashItem.id == trash_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Trash item not found")
+
+    # The thumbnail path is based on the original file path
+    thumb_path = get_thumbnail_path(item.original_path)
+    if os.path.exists(thumb_path):
+        return FileResponse(thumb_path, media_type="image/webp")
+
+    # If thumbnail doesn't exist, we just return the placeholder
+    return Response(content=SVG_PLACEHOLDER, media_type="image/svg+xml")
+
+
 @router.post("/restore/{trash_id}")
 def restore_from_trash(trash_id: str, db: Session = Depends(get_db)):
-    """Restore a file from trash."""
+    """Restore a file from trash and re-index it for the timeline."""
+    from scanner import index_single_file
+
     item = db.query(TrashItem).filter(TrashItem.id == trash_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Trash item not found")
@@ -82,9 +104,16 @@ def restore_from_trash(trash_id: str, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to restore: {e}")
 
+    # Re-index the file so it appears in the timeline immediately
+    restored_media = index_single_file(item.original_path, db)
+
     db.delete(item)
     db.commit()
-    return {"status": "success", "message": f"{item.filename} restored"}
+    return {
+        "status": "success",
+        "message": f"{item.filename} restored",
+        "media_id": restored_media.id if restored_media else None,
+    }
 
 
 @router.delete("/permanent/{trash_id}")

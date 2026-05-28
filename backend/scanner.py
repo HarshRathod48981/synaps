@@ -41,10 +41,22 @@ def classify_media(ext: str, filename: str) -> dict:
     elif ext_lower in VIDEO_EXTENSIONS:
         media_type = "video"
 
+    # iPhone screenshots: iPhones save screenshots as PNG, regular photos as JPG/HEIC.
+    # Detection: filename contains "screenshot", OR it's a PNG from an iPhone camera roll.
+    # iPhone camera roll PNGs are almost always screenshots (iPhone never saves photos as PNG).
+    import re
+    is_iphone_png_screenshot = (
+        ext_lower == ".png" and
+        media_type == "image" and
+        # Matches iPhone naming patterns: IMG_XXXX.PNG, 4-letter codes like AVGG4766.PNG, etc.
+        bool(re.match(r'^(IMG_\d+|[A-Z]{4}\d{4})', filename))
+    )
+
     is_screenshot = (
         "screenshot" in name_lower or
         "screen shot" in name_lower or
-        name_lower.startswith("screenshot")
+        name_lower.startswith("screenshot") or
+        is_iphone_png_screenshot
     )
 
     is_screen_recording = (
@@ -246,3 +258,61 @@ def scan_directory(db: Session, force_rescan: bool = False) -> dict:
 
     logger.info(f"Scan complete: {stats}")
     return stats
+
+
+def index_single_file(filepath: str, db: Session) -> Optional[MediaFile]:
+    """Index a single file and add it to the database. Used for restore-from-trash.
+    Returns the created MediaFile or None if it fails."""
+    if not os.path.exists(filepath):
+        logger.error(f"Cannot index — file not found: {filepath}")
+        return None
+
+    filename = os.path.basename(filepath)
+    ext = os.path.splitext(filename)[1].lower()
+
+    if ext not in ALL_MEDIA_EXTENSIONS:
+        logger.warning(f"Cannot index — unsupported extension: {ext}")
+        return None
+
+    # Skip if already indexed
+    existing = db.query(MediaFile).filter(MediaFile.path == filepath).first()
+    if existing:
+        return existing
+
+    try:
+        file_stat = os.stat(filepath)
+        classification = classify_media(ext, filename)
+        date_taken = get_best_date(filepath, filename)
+        file_hash = compute_file_hash(filepath)
+        relative_path = os.path.relpath(filepath, STORAGE_PATH)
+        mime_type, _ = mimetypes.guess_type(filepath)
+
+        media_file = MediaFile(
+            filename=filename,
+            path=filepath,
+            relative_path=relative_path,
+            directory=os.path.relpath(os.path.dirname(filepath), STORAGE_PATH),
+            extension=ext,
+            mime_type=mime_type or "application/octet-stream",
+            file_size=file_stat.st_size,
+            media_type=classification["media_type"],
+            is_screenshot=classification["is_screenshot"],
+            is_screen_recording=classification["is_screen_recording"],
+            is_raw=classification["is_raw"],
+            date_taken=date_taken,
+            date_created=datetime.fromtimestamp(
+                getattr(file_stat, 'st_birthtime', file_stat.st_ctime)
+            ),
+            date_modified=datetime.fromtimestamp(file_stat.st_mtime),
+            file_hash=file_hash,
+        )
+
+        db.add(media_file)
+        db.commit()
+        logger.info(f"Re-indexed restored file: {filename}")
+        return media_file
+
+    except Exception as e:
+        logger.error(f"Failed to index restored file {filepath}: {e}")
+        return None
+

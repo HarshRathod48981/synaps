@@ -23,7 +23,7 @@ export default function TimelinePage() {
   const [hasMore, setHasMore] = useState(true);
   const [stats, setStats] = useState<any>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
-  const { activeFilter } = useAppStore();
+  const { activeFilter, deletedMediaIds } = useAppStore();
   const observerRef = useRef<HTMLDivElement>(null);
 
   const fetchPage = useCallback(async (pageNum: number, reset: boolean = false) => {
@@ -175,7 +175,7 @@ export default function TimelinePage() {
 
                 {/* Media grid — simply show/hide, no animation to prevent re-render issues */}
                 {!collapsed && (
-                  <MediaGrid items={group.items} />
+                  <MediaGrid items={group.items.filter((item: any) => !deletedMediaIds.has(item.id))} />
                 )}
               </section>
             );

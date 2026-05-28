@@ -3,14 +3,14 @@
 import { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore } from '@/lib/store';
-import { getMediaItem, getFileUrl, getStreamUrl, toggleFavorite, moveToTrash } from '@/lib/api';
+import { getMediaItem, getFileUrl, getStreamUrl, getThumbnailUrl, toggleFavorite, moveToTrash } from '@/lib/api';
 import {
   X, ChevronLeft, ChevronRight, Star, Trash2, Download,
-  ZoomIn, ZoomOut, Info, Maximize, Play, Pause
+  ZoomIn, ZoomOut, Info, Maximize, Play, Pause, AlertCircle
 } from 'lucide-react';
 
 export function MediaViewer() {
-  const { viewerOpen, viewerMediaId, closeViewer } = useAppStore();
+  const { viewerOpen, viewerMediaId, closeViewer, markAsDeleted } = useAppStore();
   const [media, setMedia] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
@@ -57,8 +57,14 @@ export function MediaViewer() {
 
   const handleDelete = async () => {
     if (!media) return;
-    await moveToTrash(media.id);
-    closeViewer();
+    try {
+      await moveToTrash(media.id);
+      markAsDeleted(media.id);
+      closeViewer();
+    } catch (err: any) {
+      console.error('Failed to move to trash:', err);
+      alert(`Failed to delete: ${err.message || 'Unknown error'}`);
+    }
   };
 
   if (!viewerOpen) return null;
@@ -129,13 +135,25 @@ export function MediaViewer() {
             />
           ) : media?.media_type === 'image' ? (
             imageError ? (
-              <div className="flex flex-col items-center gap-3 text-white/50">
-                <Info size={48} className="opacity-50" />
-                <p>Failed to load image</p>
-                <p className="text-xs opacity-70">{media.filename}</p>
+              <div className="relative flex items-center justify-center w-full h-full">
+                <motion.img
+                  src={getThumbnailUrl(media.id)}
+                  alt={media.filename}
+                  className="max-w-full max-h-full object-contain transition-transform duration-200"
+                  style={{ transform: `scale(${zoom})` }}
+                  draggable={false}
+                />
+                {/* Only show unsupported banner for non-HEIC formats — HEIC is handled by backend transcoding */}
+                {!media.filename.toLowerCase().endsWith('.heic') && (
+                  <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md px-4 py-2 rounded-full flex items-center gap-2 text-white/80 text-xs border border-white/10">
+                    <AlertCircle size={14} className="text-amber-400" />
+                    Could not load full image. Showing preview.
+                  </div>
+                )}
               </div>
             ) : (
               <motion.img
+                key={media.id}
                 src={getFileUrl(media.id)}
                 alt={media.filename}
                 className="max-w-full max-h-full object-contain transition-transform duration-200"

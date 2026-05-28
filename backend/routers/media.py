@@ -119,7 +119,7 @@ def get_thumbnail(media_id: str, db: Session = Depends(get_db)):
 
 @router.get("/file/{media_id}")
 def get_file(media_id: str, db: Session = Depends(get_db)):
-    """Serve the original file."""
+    """Serve the original file, transcoding HEIC to JPEG for browser compatibility."""
     item = db.query(MediaFile).filter(MediaFile.id == media_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Media not found")
@@ -127,46 +127,74 @@ def get_file(media_id: str, db: Session = Depends(get_db)):
         logger.error(f"Failed to serve file - not found on disk: {item.path}")
         raise HTTPException(status_code=404, detail="File not found on disk")
 
-    # Resolve correct MIME type to prevent browser rendering issues (especially with uppercase .JPG)
-    mime_type = item.mime_type
-    if not mime_type or mime_type == "application/octet-stream":
-        # Force lowercase for reliable guessing
-        mime_type, _ = mimetypes.guess_type(item.filename.lower())
-        if not mime_type:
-            ext = item.extension.lower() if item.extension else ""
-            if ext in [".jpg", ".jpeg"]:
-                mime_type = "image/jpeg"
-            elif ext == ".png":
-                mime_type = "image/png"
-            elif ext == ".heic":
-                mime_type = "image/heic"
-            elif ext == ".mp4":
-                mime_type = "video/mp4"
-            elif ext == ".mov":
-                mime_type = "video/quicktime"
-            else:
-                mime_type = "application/octet-stream"
+    # Always compute the file extension for downstream decisions
+    ext = (item.extension or os.path.splitext(item.filename)[1] or "").lower()
 
+    # HEIC transcoding: browsers cannot render HEIC natively, convert to JPEG on the fly
+    if ext in (".heic", ".heif"):
+        try:
+            from PIL import Image
+            import io
+            import pillow_heif
+            from fastapi.responses import Response
+
+            pillow_heif.register_heif_opener()
+
+            with Image.open(item.path) as img:
+                if img.mode in ('RGBA', 'LA', 'P'):
+                    img = img.convert('RGB')
+
+                resample_filter = getattr(Image, 'Resampling', Image).LANCZOS
+                img.thumbnail((2560, 2560), resample_filter)
+
+                buf = io.BytesIO()
+                img.save(buf, format="JPEG", quality=90)
+                return Response(
+                    content=buf.getvalue(),
+                    media_type="image/jpeg",
+                    headers={"Cache-Control": "no-store"},
+                )
+        except Exception as e:
+            logger.error(f"HEIC transcode failed for {item.filename}: {e}")
+            # Fall through to serve raw file as last resort
+
+    # Resolve correct MIME type for non-HEIC files
+    mime_type = _resolve_mime(item, ext)
     return FileResponse(item.path, media_type=mime_type, filename=item.filename)
 
 
 @router.get("/stream/{media_id}")
 def stream_video(media_id: str, db: Session = Depends(get_db)):
-    """Stream a video file with range request support."""
-    from fastapi.responses import Response
-    from starlette.requests import Request
-
+    """Stream a video file."""
     item = db.query(MediaFile).filter(MediaFile.id == media_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Media not found")
     if not os.path.exists(item.path):
         raise HTTPException(status_code=404, detail="File not found on disk")
 
-    return FileResponse(
-        item.path,
-        media_type=item.mime_type or "video/mp4",
-        filename=item.filename,
-    )
+    ext = (item.extension or os.path.splitext(item.filename)[1] or "").lower()
+    mime_type = _resolve_mime(item, ext)
+    return FileResponse(item.path, media_type=mime_type, filename=item.filename)
+
+
+def _resolve_mime(item, ext: str) -> str:
+    """Resolve a reliable MIME type from DB value, mimetypes module, or extension fallback."""
+    mime = item.mime_type
+    if mime and mime != "application/octet-stream":
+        return mime
+    # Try the stdlib guesser with lowercased filename
+    guessed, _ = mimetypes.guess_type(item.filename.lower())
+    if guessed:
+        return guessed
+    # Manual fallback map
+    fallback = {
+        ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+        ".png": "image/png", ".gif": "image/gif", ".webp": "image/webp",
+        ".heic": "image/heic", ".heif": "image/heif",
+        ".mp4": "video/mp4", ".mov": "video/quicktime",
+        ".m4v": "video/x-m4v", ".avi": "video/x-msvideo",
+    }
+    return fallback.get(ext, "application/octet-stream")
 
 
 @router.post("/favorite/{media_id}")

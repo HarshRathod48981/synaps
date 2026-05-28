@@ -52,7 +52,8 @@ export function getThumbnailUrl(id: string) {
 }
 
 export function getFileUrl(id: string) {
-  return `${API_BASE}/media/file/${id}`;
+  // Cache-bust to avoid stale 500 responses from previous backend versions
+  return `${API_BASE}/media/file/${id}?_v=2`;
 }
 
 export function getStreamUrl(id: string) {

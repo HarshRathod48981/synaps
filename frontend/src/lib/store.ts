@@ -7,6 +7,7 @@ interface AppState {
   viewerMediaId: string | null;
   activeFilter: string | null;
   searchQuery: string;
+  deletedMediaIds: Set<string>;
 
   setTheme: (theme: 'light' | 'dark' | 'system') => void;
   toggleSidebar: () => void;
@@ -15,6 +16,7 @@ interface AppState {
   closeViewer: () => void;
   setFilter: (filter: string | null) => void;
   setSearchQuery: (query: string) => void;
+  markAsDeleted: (id: string) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -24,6 +26,7 @@ export const useAppStore = create<AppState>((set) => ({
   viewerMediaId: null,
   activeFilter: null,
   searchQuery: '',
+  deletedMediaIds: new Set(),
 
   setTheme: (theme) => set({ theme }),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
@@ -32,4 +35,9 @@ export const useAppStore = create<AppState>((set) => ({
   closeViewer: () => set({ viewerOpen: false, viewerMediaId: null }),
   setFilter: (filter) => set({ activeFilter: filter }),
   setSearchQuery: (query) => set({ searchQuery: query }),
+  markAsDeleted: (id) => set((s) => {
+    const newSet = new Set(s.deletedMediaIds);
+    newSet.add(id);
+    return { deletedMediaIds: newSet };
+  }),
 }));
