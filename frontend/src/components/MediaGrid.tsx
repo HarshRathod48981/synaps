@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { getThumbnailUrl } from '@/lib/api';
 import { useAppStore } from '@/lib/store';
 import { Play, Star } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface MediaItem {
   id: string;
@@ -26,7 +26,43 @@ interface MediaGridProps {
 function MediaThumbnail({ item, index }: { item: MediaItem; index: number }) {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
+  const [imgSrc, setImgSrc] = useState(getThumbnailUrl(item.id));
   const { openViewer } = useAppStore();
+
+  // Poll for thumbnail if it wasn't ready when we fetched the timeline
+  useEffect(() => {
+    let mounted = true;
+    let timeoutId: NodeJS.Timeout;
+
+    if (!item.has_thumbnail) {
+      const checkThumbnail = async () => {
+        try {
+          const url = getThumbnailUrl(item.id);
+          const res = await fetch(url, { method: 'HEAD' });
+          if (!mounted) return;
+          
+          const contentType = res.headers.get('content-type');
+          if (contentType && contentType.includes('svg')) {
+            // Still generating, poll again
+            timeoutId = setTimeout(checkThumbnail, 2500);
+          } else {
+            // Ready! Bust the cache to load the real WebP thumbnail
+            setImgSrc(`${url}?t=${Date.now()}`);
+          }
+        } catch (err) {
+          // Ignore network errors during polling
+        }
+      };
+      
+      // Start polling after a short delay
+      timeoutId = setTimeout(checkThumbnail, 2000);
+    }
+
+    return () => {
+      mounted = false;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [item.id, item.has_thumbnail]);
 
   return (
     <motion.div
@@ -43,7 +79,7 @@ function MediaThumbnail({ item, index }: { item: MediaItem; index: number }) {
 
       {/* Thumbnail image */}
       <img
-        src={getThumbnailUrl(item.id)}
+        src={imgSrc}
         alt={item.filename}
         loading="lazy"
         onLoad={() => setLoaded(true)}

@@ -129,6 +129,58 @@ export async function getStorageUsage() {
   return fetchAPI('/settings/storage-usage');
 }
 
+// Import Manager
+export interface ImportScanResult {
+  total_files: number;
+  photos: number;
+  videos: number;
+  total_size: number;
+  total_size_human: string;
+  source_dir: string;
+}
+
+export interface ImportPreviewResult {
+  destinations: { path: string; count: number }[];
+  total_files: number;
+  unknown_date: number;
+}
+
+export interface ImportProgress {
+  job_id: string;
+  status: 'pending' | 'scanning' | 'importing' | 'indexing' | 'complete' | 'error' | 'none';
+  phase: string;
+  progress: number;
+  total_files: number;
+  processed_files: number;
+  imported: number;
+  duplicates_skipped: number;
+  unknown_date: number;
+  errors: number;
+  error_log: string[];
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export async function scanImports(): Promise<ImportScanResult> {
+  return fetchAPI('/import/scan', { method: 'POST' });
+}
+
+export async function previewImports(): Promise<ImportPreviewResult> {
+  return fetchAPI('/import/preview', { method: 'POST' });
+}
+
+export async function executeImport(): Promise<{ status: string; job_id: string }> {
+  return fetchAPI('/import/execute', { method: 'POST' });
+}
+
+export async function getImportProgress(jobId: string): Promise<ImportProgress> {
+  return fetchAPI(`/import/progress/${jobId}`);
+}
+
+export async function getLatestImport(): Promise<ImportProgress> {
+  return fetchAPI('/import/latest');
+}
+
 // Health
 export async function checkHealth() {
   return fetchAPI('/health');

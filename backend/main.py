@@ -11,7 +11,7 @@ import logging
 
 from database import init_db, SessionLocal
 from scanner import scan_directory
-from config import HOST, PORT, THUMBNAIL_DIR, TRASH_DIR
+from config import HOST, PORT, THUMBNAIL_DIR, TRASH_DIR, IMPORT_SOURCE_DIR
 
 # Configure structured logging
 logging.basicConfig(
@@ -41,6 +41,7 @@ async def lifespan(app: FastAPI):
     init_db()
     os.makedirs(THUMBNAIL_DIR, exist_ok=True)
     os.makedirs(TRASH_DIR, exist_ok=True)
+    os.makedirs(IMPORT_SOURCE_DIR, exist_ok=True)
 
     # Run scan in background thread to not block startup
     scan_thread = threading.Thread(target=run_initial_scan, daemon=True)
@@ -72,6 +73,7 @@ from routers.sync import router as sync_router
 from routers.search import router as search_router
 from routers.trash import router as trash_router
 from routers.settings import router as settings_router
+from routers.imports import router as imports_router
 
 app.include_router(media_router)
 app.include_router(finder_router)
@@ -79,6 +81,7 @@ app.include_router(sync_router)
 app.include_router(search_router)
 app.include_router(trash_router)
 app.include_router(settings_router)
+app.include_router(imports_router)
 
 
 @app.get("/api/health")

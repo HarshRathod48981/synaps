@@ -114,7 +114,11 @@ def get_thumbnail(media_id: str, db: Session = Depends(get_db)):
     
     # Return an SVG placeholder so frontend doesn't hang
     from fastapi.responses import Response
-    return Response(content=SVG_PLACEHOLDER, media_type="image/svg+xml")
+    return Response(
+        content=SVG_PLACEHOLDER, 
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "no-store"}
+    )
 
 
 @router.get("/file/{media_id}")
