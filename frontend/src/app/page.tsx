@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { TopBar } from '@/components/TopBar';
 import { MediaGrid } from '@/components/MediaGrid';
@@ -22,7 +22,12 @@ export default function TimelinePage() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [stats, setStats] = useState<any>(null);
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  
+  // State for collapsible hierarchies
+  const [collapsedYears, setCollapsedYears] = useState<Set<number>>(new Set());
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
+  const [hasInitializedState, setHasInitializedState] = useState(false);
+  
   const { activeFilter, deletedMediaIds } = useAppStore();
   const observerRef = useRef<HTMLDivElement>(null);
 
@@ -82,12 +87,54 @@ export default function TimelinePage() {
     setPage(1);
     setGroups([]);
     setHasMore(true);
+    setHasInitializedState(false); // Re-initialize collapse states for new filter
     fetchPage(1, true);
   }, [activeFilter]); // intentionally exclude fetchPage to avoid loops
 
   useEffect(() => {
     getMediaStats().then(setStats).catch(console.error);
   }, []);
+
+  // Transform flat month groups into year-based groups
+  const yearGroups = useMemo(() => {
+    const grouped = new Map<number, { year: number; months: TimelineGroup[]; totalItems: number }>();
+    
+    for (const group of groups) {
+      if (!grouped.has(group.year)) {
+        grouped.set(group.year, { year: group.year, months: [], totalItems: 0 });
+      }
+      const yearObj = grouped.get(group.year)!;
+      yearObj.months.push(group);
+      yearObj.totalItems += group.items.length;
+    }
+    
+    return Array.from(grouped.values()).sort((a, b) => b.year - a.year);
+  }, [groups]);
+
+  // Auto-collapse logic on initial load
+  useEffect(() => {
+    if (yearGroups.length > 0 && !hasInitializedState) {
+      const latestYear = yearGroups[0].year;
+      // Since yearGroups are sorted descending, [0] is the most recent
+      const latestMonthKey = `${yearGroups[0].months[0].year}-${yearGroups[0].months[0].month}`;
+      
+      const newCollapsedYears = new Set<number>();
+      const newExpandedMonths = new Set<string>();
+      
+      for (const yg of yearGroups) {
+        if (yg.year !== latestYear) {
+          newCollapsedYears.add(yg.year);
+        }
+      }
+      
+      // Expand only the very first month by default
+      newExpandedMonths.add(latestMonthKey);
+      
+      setCollapsedYears(newCollapsedYears);
+      setExpandedMonths(newExpandedMonths);
+      setHasInitializedState(true);
+    }
+  }, [yearGroups, hasInitializedState]);
 
   // Infinite scroll with debounce guard
   useEffect(() => {
@@ -110,8 +157,17 @@ export default function TimelinePage() {
     return () => observer.disconnect();
   }, [hasMore, loading, loadingMore, fetchPage]);
 
-  const toggleGroup = (key: string) => {
-    setCollapsedGroups(prev => {
+  const toggleYear = (year: number) => {
+    setCollapsedYears(prev => {
+      const next = new Set(prev);
+      if (next.has(year)) next.delete(year);
+      else next.add(year);
+      return next;
+    });
+  };
+
+  const toggleMonth = (key: string) => {
+    setExpandedMonths(prev => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
@@ -145,39 +201,77 @@ export default function TimelinePage() {
           </motion.div>
         )}
 
-        {/* Timeline groups */}
-        <div className="space-y-6 mt-4">
-          {groups.map((group) => {
-            const key = `${group.year}-${group.month}`;
-            const collapsed = collapsedGroups.has(key);
+        {/* Two-Level Timeline Hierarchy */}
+        <div className="space-y-8 mt-6">
+          {yearGroups.map((yearGroup) => {
+            const yearCollapsed = collapsedYears.has(yearGroup.year);
 
             return (
-              <section key={key} style={{ contentVisibility: 'auto' }}>
-                {/* Sticky month header */}
-                <button
-                  onClick={() => toggleGroup(key)}
-                  className="month-header flex items-center gap-2 group w-full text-left
-                    bg-white/60 dark:bg-[#0a0a0b]/60 backdrop-blur-xl"
-                >
-                  <motion.div
-                    animate={{ rotate: collapsed ? 0 : 90 }}
-                    transition={{ duration: 0.2 }}
+              <div key={yearGroup.year} className="space-y-4">
+                {/* Year Header */}
+                <div className="flex items-center gap-3 w-full">
+                  <button
+                    onClick={() => toggleYear(yearGroup.year)}
+                    className="flex items-center gap-2 group text-left shrink-0 focus:outline-none"
                   >
-                    <ChevronRight size={14} className="text-gray-400" />
-                  </motion.div>
-                  <h2 className="text-sm font-semibold text-gray-900 dark:text-white">
-                    {group.month_name} {group.year}
-                  </h2>
-                  <span className="text-xs text-gray-400 dark:text-gray-500">
-                    {group.items.length} items
+                    <motion.div
+                      animate={{ rotate: yearCollapsed ? 0 : 90 }}
+                      transition={{ duration: 0.2 }}
+                      className="bg-gray-100 dark:bg-white/[0.05] rounded-full p-1 group-hover:bg-gray-200 dark:group-hover:bg-white/[0.1] transition-colors"
+                    >
+                      <ChevronRight size={16} className="text-gray-500 dark:text-gray-400" />
+                    </motion.div>
+                    <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">
+                      {yearGroup.year === 0 ? "Old Photos" : yearGroup.year}
+                    </h1>
+                  </button>
+                  <div className="h-px bg-gray-200 dark:bg-white/10 flex-1 ml-2" />
+                  <span className="text-xs font-medium text-gray-400 shrink-0">
+                    {yearGroup.totalItems.toLocaleString()} items
                   </span>
-                </button>
+                </div>
 
-                {/* Media grid — simply show/hide, no animation to prevent re-render issues */}
-                {!collapsed && (
-                  <MediaGrid items={group.items.filter((item: any) => !deletedMediaIds.has(item.id))} />
+                {/* Months Loop */}
+                {!yearCollapsed && (
+                  <div className="pl-3 lg:pl-6 space-y-6">
+                    {yearGroup.months.map((group) => {
+                      const key = `${group.year}-${group.month}`;
+                      const monthExpanded = expandedMonths.has(key);
+
+                      return (
+                        <section key={key} style={{ contentVisibility: 'auto' }}>
+                          {/* Sticky month header */}
+                          <button
+                            onClick={() => toggleMonth(key)}
+                            className="month-header flex items-center gap-2 group w-full text-left
+                              bg-white/60 dark:bg-[#0a0a0b]/60 backdrop-blur-xl py-2 focus:outline-none"
+                          >
+                            <motion.div
+                              animate={{ rotate: monthExpanded ? 90 : 0 }}
+                              transition={{ duration: 0.2 }}
+                            >
+                              <ChevronRight size={14} className="text-gray-400 group-hover:text-synaps-500 transition-colors" />
+                            </motion.div>
+                            <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                              {yearGroup.year === 0 ? "Archive" : `${group.month_name} ${group.year}`}
+                            </h2>
+                            <span className="text-xs text-gray-400 dark:text-gray-500">
+                              {group.items.length} items
+                            </span>
+                          </button>
+
+                          {/* Media grid */}
+                          {monthExpanded && (
+                            <div className="pt-2">
+                              <MediaGrid items={group.items.filter((item: any) => !deletedMediaIds.has(item.id))} />
+                            </div>
+                          )}
+                        </section>
+                      );
+                    })}
+                  </div>
                 )}
-              </section>
+              </div>
             );
           })}
         </div>

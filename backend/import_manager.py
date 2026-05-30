@@ -182,10 +182,10 @@ def _get_destination(filepath: str, filename: str) -> tuple[str, str]:
         label = "Old_Photos"
     else:
         dest_dir = os.path.join(
-            IMPORT_DEST_BASE, "Timeline",
+            IMPORT_DEST_BASE,
             str(date.year), f"{date.month:02d}"
         )
-        label = f"Timeline/{date.year}/{date.month:02d}"
+        label = f"{date.year}/{date.month:02d}"
 
     return os.path.join(dest_dir, filename), label
 
@@ -246,10 +246,10 @@ def _route_by_date(date: datetime, filename: str) -> tuple[str, str]:
         label = "Old_Photos"
     else:
         dest_dir = os.path.join(
-            IMPORT_DEST_BASE, "Timeline",
+            IMPORT_DEST_BASE,
             str(date.year), f"{date.month:02d}"
         )
-        label = f"Timeline/{date.year}/{date.month:02d}"
+        label = f"{date.year}/{date.month:02d}"
     return os.path.join(dest_dir, filename), label
 
 
@@ -322,7 +322,7 @@ class ImportManager:
         others = []
 
         for label, count in destinations.items():
-            if label.startswith("Timeline/"):
+            if label not in ("Old_Photos", "Unknown_Date"):
                 timeline_entries.append({"path": label, "count": count})
             else:
                 others.append({"path": label, "count": count})

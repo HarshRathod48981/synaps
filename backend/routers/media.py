@@ -65,6 +65,25 @@ def get_timeline(
     # Group by month/year
     groups = {}
     for item in items:
+        # Check if it's an Old Photo (archive)
+        is_old_photo = False
+        if item.directory and "Old_Photos" in item.directory:
+            is_old_photo = True
+        elif item.relative_path and "Old_Photos" in item.relative_path:
+            is_old_photo = True
+
+        if is_old_photo:
+            key = "Old_Photos"
+            if key not in groups:
+                groups[key] = {
+                    "year": 0,  # 0 sorts to the bottom
+                    "month": 0,
+                    "month_name": "Archive",
+                    "items": [],
+                }
+            groups[key]["items"].append(_serialize_media(item))
+            continue
+
         dt = item.date_taken or item.date_created or datetime.now()
         key = dt.strftime("%Y-%m")
         if key not in groups:
