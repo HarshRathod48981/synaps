@@ -13,6 +13,7 @@ interface MediaItem {
   extension: string;
   is_favorite: boolean;
   date_taken: string | null;
+  has_thumbnail?: boolean;
   thumbnail_url: string;
   file_url: string;
   stream_url?: string;
