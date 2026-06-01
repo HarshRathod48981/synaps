@@ -51,7 +51,9 @@ class MediaFile(Base):
     thumbnail_path = Column(String)
 
     # Hash for deduplication
-    file_hash = Column(String, index=True)
+    file_hash = Column(String, index=True)  # MD5 (first 64KB) for fast partial checks
+    content_hash = Column(String(64), index=True, nullable=True)  # Full SHA-256 for exact match
+    hash_algorithm = Column(String(16), default="sha256")
 
 
 class TrashItem(Base):
@@ -75,6 +77,8 @@ class SyncRecord(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     filename = Column(String, nullable=False)
     file_hash = Column(String, nullable=False, index=True)
+    content_hash = Column(String(64), index=True, nullable=True)
+    hash_algorithm = Column(String(16), default="sha256")
     file_size = Column(Integer, default=0)
     destination_path = Column(String, nullable=False)
     synced_at = Column(DateTime, default=func.now())

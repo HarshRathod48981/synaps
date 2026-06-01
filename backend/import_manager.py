@@ -27,7 +27,7 @@ from config import (
     STORAGE_PATH,
 )
 from scanner import (
-    get_best_date, compute_file_hash, classify_media,
+    get_best_date, compute_file_hash, compute_content_hash, classify_media,
     scan_directory,
 )
 from models import MediaFile, SyncRecord
@@ -409,12 +409,20 @@ def _run_import(source_dir: str, job: ImportJob):
         # Pre-compute all destinations and hashes
         file_plans = []  # [(filepath, dest_path, dest_label, file_hash, is_unknown)]
 
-        # Pre-fetch existing hashes for fast duplicate checking
-        existing_hashes = set()
-        for (h,) in db.query(MediaFile.file_hash).filter(MediaFile.file_hash.isnot(None)).all():
-            existing_hashes.add(h)
-        for (h,) in db.query(SyncRecord.file_hash).filter(SyncRecord.file_hash.isnot(None)).all():
-            existing_hashes.add(h)
+        # Pre-fetch existing hashes and sizes for fast duplicate checking
+        # Group existing files by size
+        existing_sizes = {}
+        for row in db.query(MediaFile.id, MediaFile.file_size, MediaFile.content_hash, MediaFile.path).all():
+            fid, fsize, fchash, fpath = row
+            if fsize not in existing_sizes:
+                existing_sizes[fsize] = []
+            existing_sizes[fsize].append({"id": fid, "content_hash": fchash, "path": fpath, "type": "media"})
+            
+        for row in db.query(SyncRecord.id, SyncRecord.file_size, SyncRecord.content_hash, SyncRecord.destination_path).all():
+            fid, fsize, fchash, fpath = row
+            if fsize not in existing_sizes:
+                existing_sizes[fsize] = []
+            existing_sizes[fsize].append({"id": fid, "content_hash": fchash, "path": fpath, "type": "sync"})
 
         for i, filepath in enumerate(files):
             filename = os.path.basename(filepath)
@@ -438,12 +446,49 @@ def _run_import(source_dir: str, job: ImportJob):
         for filepath, dest_path, label, file_hash, is_unknown in file_plans:
             filename = os.path.basename(filepath)
 
-            # Duplicate check 1: hash exists in DB
-            if file_hash and file_hash in existing_hashes:
-                job.duplicates_skipped += 1
-                job.processed_files += 1
-                logger.debug(f"  SKIP (hash dup): {filename}")
-                continue
+            # Duplicate check 1: Content Hash (Two-Stage Verification)
+            try:
+                fsize = os.path.getsize(filepath)
+                if fsize in existing_sizes:
+                    # Stage 2: Size matches, so check content hashes
+                    candidates = existing_sizes[fsize]
+                    incoming_hash = None
+                    is_dup = False
+                    dup_path = ""
+                    
+                    for candidate in candidates:
+                        cand_hash = candidate["content_hash"]
+                        cand_path = candidate["path"]
+                        
+                        # If existing file doesn't have a hash, compute it dynamically to prevent race conditions
+                        if not cand_hash:
+                            if os.path.exists(cand_path):
+                                cand_hash = compute_content_hash(cand_path)
+                                # Update DB on the spot
+                                if candidate["type"] == "media":
+                                    db.query(MediaFile).filter(MediaFile.id == candidate["id"]).update({"content_hash": cand_hash})
+                                else:
+                                    db.query(SyncRecord).filter(SyncRecord.id == candidate["id"]).update({"content_hash": cand_hash})
+                                candidate["content_hash"] = cand_hash
+                                
+                        if cand_hash:
+                            if not incoming_hash:
+                                incoming_hash = compute_content_hash(filepath)
+                                
+                            if incoming_hash == cand_hash:
+                                is_dup = True
+                                dup_path = cand_path
+                                break
+                                
+                    if is_dup:
+                        job.duplicates_skipped += 1
+                        job.processed_files += 1
+                        log_msg = f"Duplicate skipped: {filename} (Matches existing: {dup_path})"
+                        job.error_log.append(log_msg)
+                        logger.info(log_msg)
+                        continue
+            except OSError:
+                pass
 
             # Duplicate check 2: destination file already exists
             if os.path.exists(dest_path):

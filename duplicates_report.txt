@@ -1,0 +1,38 @@
+Synaps Duplicate Audit Report
+Generated at: Mon Jun  1 22:36:58 2026
+Total Exact Duplicates Found: 3
+------------------------------------------------------------
+
+Original:
+  path: /Users/harsh_rathod/Desktop/nas_dashboard/mock_storage/Vault/Harsh/Iphone/2026/02/DOBM8301 1.JPG
+  date: 2026-02-05 14:39:54
+  size: 107.1 KB
+Duplicate:
+  path: /Users/harsh_rathod/Desktop/nas_dashboard/mock_storage/Vault/Harsh/Iphone/2026/02/DOBM8301.JPG
+  date: 2026-02-05 14:39:54
+  size: 107.1 KB
+
+----------------------------------------
+
+Original:
+  path: /Users/harsh_rathod/Desktop/nas_dashboard/mock_storage/Vault/Harsh/Iphone/2026/03/IMG_0628 1.PNG
+  date: 2026-03-28 19:19:26
+  size: 8.7 MB
+Duplicate:
+  path: /Users/harsh_rathod/Desktop/nas_dashboard/mock_storage/Vault/Harsh/Iphone/2026/03/IMG_0628.PNG
+  date: 2026-03-28 19:19:26
+  size: 8.7 MB
+
+----------------------------------------
+
+Original:
+  path: /Users/harsh_rathod/Desktop/nas_dashboard/mock_storage/Vault/Harsh/Iphone/2026/02/LNLW1054 1.JPG
+  date: 2026-02-05 14:39:54
+  size: 93.5 KB
+Duplicate:
+  path: /Users/harsh_rathod/Desktop/nas_dashboard/mock_storage/Vault/Harsh/Iphone/2026/02/LNLW1054.JPG
+  date: 2026-02-05 14:39:54
+  size: 93.5 KB
+
+----------------------------------------
+

@@ -89,6 +89,22 @@ def compute_file_hash(filepath: str, chunk_size: int = 8192) -> str:
     return hasher.hexdigest()
 
 
+def compute_content_hash(filepath: str, chunk_size: int = 65536) -> str:
+    """Compute full SHA-256 hash for exact duplicate detection.
+    Reads entire file in chunks."""
+    hasher = hashlib.sha256()
+    try:
+        with open(filepath, "rb") as f:
+            while True:
+                chunk = f.read(chunk_size)
+                if not chunk:
+                    break
+                hasher.update(chunk)
+    except (IOError, OSError):
+        return ""
+    return hasher.hexdigest()
+
+
 def extract_exif_date(filepath: str) -> Optional[datetime]:
     """Extract date taken from EXIF data.
     Uses exifread for JPEG/TIFF, and PIL+pillow_heif for HEIC files
@@ -334,6 +350,20 @@ def scan_directory(db: Session, force_rescan: bool = False) -> dict:
                 db.add_all(batch)
                 db.commit()
                 logger.info(f"  Committed final batch of {len(batch)} files from {root}")
+
+    # ── Database Garbage Collection ──
+    logger.info("Running database garbage collection...")
+    all_media = db.query(MediaFile).all()
+    stale_count = 0
+    for media in all_media:
+        if not os.path.exists(media.path):
+            db.delete(media)
+            stale_count += 1
+            
+    if stale_count > 0:
+        db.commit()
+        logger.info(f"Deleted {stale_count} stale records from database")
+    stats["stale_deleted"] = stale_count
 
     logger.info(f"Scan complete: {stats}")
     return stats
