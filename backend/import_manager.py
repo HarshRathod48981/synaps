@@ -307,7 +307,11 @@ class ImportManager:
         destinations: dict[str, int] = {}
         unknown_count = 0
 
-        for filepath in files:
+        # Limit preview to max 200 files to prevent API timeouts on massive 9GB imports
+        preview_limit = 200
+        files_to_preview = files[:preview_limit]
+
+        for filepath in files_to_preview:
             filename = os.path.basename(filepath)
             (_, label), is_unknown = _get_destination_with_unknown(filepath, filename)
 
@@ -315,6 +319,9 @@ class ImportManager:
                 unknown_count += 1
 
             destinations[label] = destinations.get(label, 0) + 1
+
+        if len(files) > preview_limit:
+            destinations["Other Dates (Preview Limited)"] = len(files) - preview_limit
 
         # Sort: Timeline entries descending by date, then Old_Photos, then Unknown_Date
         sorted_dests = []
