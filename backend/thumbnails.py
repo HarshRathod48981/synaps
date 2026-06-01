@@ -147,7 +147,8 @@ import queue
 import threading
 
 # Setup background worker queue
-thumbnail_queue = queue.Queue()
+# Use a LIFO queue so the most recently requested thumbnails (what the user is currently looking at) are processed first
+thumbnail_queue = queue.LifoQueue()
 
 def _thumbnail_worker():
     """Background worker that continuously processes the thumbnail queue."""
@@ -178,9 +179,10 @@ def _thumbnail_worker():
             if 'item' in locals() and hasattr(item, '__len__') and len(item) == 2:
                 thumbnail_queue.task_done()
 
-# Start worker thread
-worker_thread = threading.Thread(target=_thumbnail_worker, daemon=True)
-worker_thread.start()
+# Start multiple worker threads (2 for Core2Duo)
+for _ in range(2):
+    worker_thread = threading.Thread(target=_thumbnail_worker, daemon=True)
+    worker_thread.start()
 
 def enqueue_thumbnail(source_path: str) -> str:
     """Enqueue a thumbnail for background generation and return its expected path."""
