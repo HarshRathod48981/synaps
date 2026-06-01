@@ -83,15 +83,20 @@ function ImportSection() {
     }
   };
 
-  const startPolling = (id: string) => {
+  const startPolling = (id: string, isPreview: boolean = false) => {
     stopPolling();
     pollRef.current = setInterval(async () => {
       try {
         const p = await getImportProgress(id);
         setProgress(p);
         if (p.status === 'complete') {
-          setImportState('complete');
           stopPolling();
+          if (isPreview && p.preview_destinations) {
+            setPreviewResult({ destinations: p.preview_destinations, status: 'success' });
+            setImportState('previewed');
+          } else if (!isPreview) {
+            setImportState('complete');
+          }
         } else if (p.status === 'error') {
           setImportState('error');
           setError(p.phase || 'Unknown error');
@@ -124,8 +129,13 @@ function ImportSection() {
     setError(null);
     try {
       const result = await previewImports();
-      setPreviewResult(result);
-      setImportState('previewed');
+      if (result.status === 'started' && result.job_id) {
+        setJobId(result.job_id);
+        startPolling(result.job_id, true);
+      } else {
+        setPreviewResult(result);
+        setImportState('previewed');
+      }
     } catch (err: any) {
       setImportState('error');
       setError(err.message || 'Preview failed');
@@ -314,6 +324,17 @@ function ImportSection() {
             <Loader2 size={28} className="text-emerald-500 animate-spin mb-3" />
             <p className="text-sm text-gray-500 dark:text-gray-400">Extracting metadata & computing destinations...</p>
             <p className="text-[11px] text-gray-400 mt-1">This may take a moment for large libraries</p>
+            {progress && (
+              <div className="w-full mt-4">
+                <div className="flex justify-between text-[10px] text-gray-400 mb-1">
+                  <span>{progress.phase}</span>
+                  <span>{progress.progress}%</span>
+                </div>
+                <div className="h-1 bg-gray-200 dark:bg-white/10 rounded-full overflow-hidden">
+                  <motion.div className="h-full bg-emerald-500" animate={{ width: `${progress.progress}%` }} />
+                </div>
+              </div>
+            )}
           </motion.div>
         )}
 

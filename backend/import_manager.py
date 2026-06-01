@@ -54,7 +54,8 @@ class ImportJob:
     duplicates_skipped: int = 0
     unknown_date: int = 0
     errors: int = 0
-    error_log: list = field(default_factory=list)
+    error_log: list[str] = field(default_factory=list)
+    preview_destinations: Optional[dict[str, int]] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
 
@@ -71,6 +72,7 @@ class ImportJob:
             "unknown_date": self.unknown_date,
             "errors": self.errors,
             "error_log": self.error_log,  # Full log to see all duplicates
+            "preview_destinations": self.preview_destinations,
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
         }
@@ -296,57 +298,84 @@ class ImportManager:
         }
 
     @staticmethod
-    def preview(source_dir: str = IMPORT_SOURCE_DIR) -> dict:
+    def execute_preview(source_dir: str = IMPORT_SOURCE_DIR) -> ImportJob:
         """
-        Full preview: extract dates for every file and compute destinations.
-        Returns {destination_label: file_count} mapping.
-        Does NOT move anything.
+        Starts a full preview in the background.
+        Extracts dates for every file and computes destinations.
         """
-        files = _collect_import_files(source_dir)
+        job = job_store.create()
+        job.phase = "Initializing preview..."
+        job.status = "running"
+        job.started_at = datetime.now()
+        
+        thread = threading.Thread(target=ImportManager._run_preview, args=(job, source_dir), daemon=True)
+        thread.start()
+        
+        return job
 
-        destinations: dict[str, int] = {}
-        unknown_count = 0
+    @staticmethod
+    def _run_preview(job: ImportJob, source_dir: str):
+        """Background thread for executing the preview."""
+        from database import SessionLocal
+        db = SessionLocal()
+        
+        try:
+            job.phase = "Finding files..."
+            files = _collect_import_files(source_dir)
+            job.total_files = len(files)
+            
+            destinations: dict[str, int] = {}
+            unknown_count = 0
 
-        # Limit preview to max 200 files to prevent API timeouts on massive 9GB imports
-        preview_limit = 200
-        files_to_preview = files[:preview_limit]
+            for i, filepath in enumerate(files):
+                filename = os.path.basename(filepath)
+                (_, label), is_unknown = _get_destination_with_unknown(filepath, filename)
 
-        for filepath in files_to_preview:
-            filename = os.path.basename(filepath)
-            (_, label), is_unknown = _get_destination_with_unknown(filepath, filename)
+                if is_unknown:
+                    unknown_count += 1
 
-            if is_unknown:
-                unknown_count += 1
+                destinations[label] = destinations.get(label, 0) + 1
+                
+                job.processed_files += 1
+                job.progress = int(((i + 1) / len(files)) * 100)
+                job.phase = f"Analyzing metadata... ({i + 1}/{len(files)})"
 
-            destinations[label] = destinations.get(label, 0) + 1
+            # Sort destinations
+            sorted_dests = []
+            timeline_entries = []
+            others = []
+            
+            for label, count in destinations.items():
+                if label not in ("Old_Photos", "Unknown_Date"):
+                    timeline_entries.append({"path": label, "count": count})
+                else:
+                    others.append({"path": label, "count": count})
+                    
+            # Sort timeline by path descending (newest first)
+            timeline_entries.sort(key=lambda x: x["path"], reverse=True)
 
-        if len(files) > preview_limit:
-            destinations["Other Dates (Preview Limited)"] = len(files) - preview_limit
+            # Others: Old_Photos first, then Unknown_Date
+            others.sort(key=lambda x: (0 if x["path"] == "Old_Photos" else 1))
 
-        # Sort: Timeline entries descending by date, then Old_Photos, then Unknown_Date
-        sorted_dests = []
-        timeline_entries = []
-        others = []
+            sorted_dests = timeline_entries + others
 
-        for label, count in destinations.items():
-            if label not in ("Old_Photos", "Unknown_Date"):
-                timeline_entries.append({"path": label, "count": count})
-            else:
-                others.append({"path": label, "count": count})
-
-        # Sort timeline by path descending (newest first)
-        timeline_entries.sort(key=lambda x: x["path"], reverse=True)
-
-        # Others: Old_Photos first, then Unknown_Date
-        others.sort(key=lambda x: (0 if x["path"] == "Old_Photos" else 1))
-
-        sorted_dests = timeline_entries + others
-
-        return {
-            "destinations": sorted_dests,
-            "total_files": len(files),
-            "unknown_date": unknown_count,
-        }
+            job.preview_destinations = {
+                "destinations": sorted_dests,
+                "total_files": len(files),
+                "unknown_date": unknown_count,
+            }
+            
+            job.status = "complete"
+            job.phase = "Preview complete!"
+            job.progress = 100
+            
+        except Exception as e:
+            logger.error(f"Preview [{job.id}] failed: {e}", exc_info=True)
+            job.status = "error"
+            job.error_log.append(f"Fatal error: {str(e)}")
+        finally:
+            job.completed_at = datetime.now()
+            db.close()
 
     @staticmethod
     def execute(

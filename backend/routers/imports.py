@@ -32,14 +32,15 @@ def scan_imports():
 @router.post("/preview")
 def preview_imports():
     """
-    Full import preview.
-    Extracts dates from every file and computes destination paths.
-    Returns destination → file count mapping.
-    Does NOT move any files.
+    Start a background preview job.
+    Returns the job ID immediately for progress polling.
     """
     try:
-        result = ImportManager.preview()
-        return result
+        job = ImportManager.execute_preview()
+        return {
+            "status": "started",
+            "job_id": job.id,
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
