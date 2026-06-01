@@ -475,6 +475,19 @@ function ImportSection() {
               ))}
             </div>
 
+            {progress.error_log && progress.error_log.length > 0 && (
+              <div className="mb-5 px-3 py-2 rounded-xl bg-gray-50 dark:bg-white/[0.03] max-h-40 overflow-y-auto border border-black/[0.03] dark:border-white/[0.03]">
+                <p className="text-[10px] font-semibold text-gray-500 mb-2 uppercase tracking-wider">Import Log</p>
+                <div className="space-y-1">
+                  {progress.error_log.map((log, i) => (
+                    <p key={i} className="text-[10px] text-gray-400 font-mono leading-relaxed">
+                      {log}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <p className="text-[11px] text-gray-400 text-center mb-4">
               New media is now visible in your Timeline
             </p>

@@ -70,7 +70,7 @@ class ImportJob:
             "duplicates_skipped": self.duplicates_skipped,
             "unknown_date": self.unknown_date,
             "errors": self.errors,
-            "error_log": self.error_log[-20:],  # Last 20 errors
+            "error_log": self.error_log,  # Full log to see all duplicates
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
         }
