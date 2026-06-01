@@ -92,7 +92,7 @@ function ImportSection() {
         if (p.status === 'complete') {
           stopPolling();
           if (isPreview && p.preview_destinations) {
-            setPreviewResult({ destinations: p.preview_destinations, status: 'success' });
+            setPreviewResult(p.preview_destinations);
             setImportState('previewed');
           } else if (!isPreview) {
             setImportState('complete');
