@@ -116,7 +116,7 @@ def get_media_item(media_id: str, db: Session = Depends(get_db)):
     return _serialize_media(item, full=True)
 
 
-@router.get("/thumbnail/{media_id}")
+@router.api_route("/thumbnail/{media_id}", methods=["GET", "HEAD"])
 def get_thumbnail(media_id: str, db: Session = Depends(get_db)):
     """Get or generate a thumbnail for a media file."""
     item = db.query(MediaFile).filter(MediaFile.id == media_id).first()
@@ -140,7 +140,7 @@ def get_thumbnail(media_id: str, db: Session = Depends(get_db)):
     )
 
 
-@router.get("/file/{media_id}")
+@router.api_route("/file/{media_id}", methods=["GET", "HEAD"])
 def get_file(media_id: str, db: Session = Depends(get_db)):
     """Serve the original file, transcoding HEIC to JPEG for browser compatibility."""
     item = db.query(MediaFile).filter(MediaFile.id == media_id).first()
@@ -186,7 +186,7 @@ def get_file(media_id: str, db: Session = Depends(get_db)):
     return FileResponse(item.path, media_type=mime_type, filename=item.filename)
 
 
-@router.get("/stream/{media_id}")
+@router.api_route("/stream/{media_id}", methods=["GET", "HEAD"])
 def stream_video(media_id: str, db: Session = Depends(get_db)):
     """Stream a video file."""
     item = db.query(MediaFile).filter(MediaFile.id == media_id).first()
