@@ -48,7 +48,7 @@ PORT = int(os.getenv("SYNAPS_PORT", "8000"))
 SYNC_TARGET_DIR = os.path.join(STORAGE_PATH, "Vault", "Harsh", "Iphone")
 
 # Import Manager
-IMPORT_SOURCE_DIR = os.path.join(STORAGE_PATH, "Imports", "harsh", "Iphone")
+IMPORT_SOURCE_DIR = os.path.join(STORAGE_PATH, "Imports", "Harsh", "iphone")
 IMPORT_DEST_BASE = os.path.join(STORAGE_PATH, "Vault", "Harsh", "Iphone")
 IMPORT_OLD_PHOTOS_CUTOFF = 2024  # Dates before this year → Old_Photos/
 
