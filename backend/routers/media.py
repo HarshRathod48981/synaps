@@ -10,6 +10,7 @@ from datetime import datetime
 
 from database import get_db
 from models import MediaFile
+from config import ARCHIVE_CUTOFF_YEAR
 from thumbnails import enqueue_thumbnail, get_thumbnail_path
 import os
 import mimetypes
@@ -25,8 +26,12 @@ SVG_PLACEHOLDER = b"""<svg width="320" height="320" xmlns="http://www.w3.org/200
 </svg>"""
 
 
-@router.get("/timeline")
-def get_timeline(
+@router.get("")
+@router.get("/")
+@router.get("/timeline")  # Keep for backwards compatibility if needed
+def get_media_browser(
+    view: str = Query("timeline", description="View type: 'timeline' or 'gallery'"),
+    sources: Optional[str] = Query(None, description="Comma-separated list of sources, e.g. 'iphone,mac'"),
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
     media_type: Optional[str] = Query(None),
@@ -35,12 +40,16 @@ def get_timeline(
     db: Session = Depends(get_db),
 ):
     """
-    Get media grouped by month/year for timeline view.
+    Get media grouped by month/year for timeline view, or flat for gallery view.
     Returns media sorted by date_taken descending.
     """
     query = db.query(MediaFile)
 
     # Apply filters
+    if sources:
+        source_list = [s.strip().lower() for s in sources.split(",")]
+        query = query.filter(MediaFile.source.in_(source_list))
+
     if media_type:
         if media_type == "screenshot":
             query = query.filter(MediaFile.is_screenshot == True)
@@ -62,17 +71,30 @@ def get_timeline(
     offset = (page - 1) * per_page
     items = query.order_by(desc(MediaFile.date_taken)).offset(offset).limit(per_page).all()
 
-    # Group by month/year
+    if view == "gallery":
+        flat_items = []
+        for item in items:
+            serialized = _serialize_media(item)
+            dt = item.date_taken or item.date_created or datetime.now()
+            # For the sticky header: '16 May 2026'
+            serialized["date_string"] = dt.strftime("%-d %B %Y")
+            flat_items.append(serialized)
+            
+        return {
+            "items": flat_items,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": (total + per_page - 1) // per_page if per_page > 0 else 0,
+        }
+
+    # Timeline View: Group by month/year
     groups = {}
     for item in items:
-        # Check if it's an Old Photo (archive)
-        is_old_photo = False
-        if item.directory and "Old_Photos" in item.directory:
-            is_old_photo = True
-        elif item.relative_path and "Old_Photos" in item.relative_path:
-            is_old_photo = True
-
-        if is_old_photo:
+        dt = item.date_taken or item.date_created or datetime.now()
+        
+        # Check if it's an Old Photo (Archive)
+        if dt.year < ARCHIVE_CUTOFF_YEAR:
             key = "Old_Photos"
             if key not in groups:
                 groups[key] = {
@@ -84,7 +106,6 @@ def get_timeline(
             groups[key]["items"].append(_serialize_media(item))
             continue
 
-        dt = item.date_taken or item.date_created or datetime.now()
         key = dt.strftime("%Y-%m")
         if key not in groups:
             groups[key] = {

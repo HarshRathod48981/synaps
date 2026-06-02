@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from config import (
     STORAGE_PATH, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS,
     DOCUMENT_EXTENSIONS, RAW_EXTENSIONS, ALL_MEDIA_EXTENSIONS,
-    SCAN_BATCH_SIZE, ALLOWED_SCAN_PATHS
+    SCAN_BATCH_SIZE, ALLOWED_SCAN_PATHS, SOURCE_MAPPING
 )
 from models import MediaFile
 
@@ -310,11 +310,19 @@ def scan_directory(db: Session, force_rescan: bool = False) -> dict:
 
                     mime_type, _ = mimetypes.guess_type(filepath)
 
+                    # Derive source
+                    parts = relative_path.split('/')
+                    source_val = "unknown"
+                    if len(parts) >= 3 and parts[0] == "Vault":
+                        raw_source = parts[2]
+                        source_val = SOURCE_MAPPING.get(raw_source, raw_source.lower())
+
                     media_file = MediaFile(
                         filename=filename,
                         path=filepath,
                         relative_path=relative_path,
                         directory=os.path.relpath(root, STORAGE_PATH),
+                        source=source_val,
                         extension=ext,
                         mime_type=mime_type or "application/octet-stream",
                         file_size=file_stat.st_size,

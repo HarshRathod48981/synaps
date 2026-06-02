@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { TopBar } from '@/components/TopBar';
 import { MediaGrid } from '@/components/MediaGrid';
 import { useAppStore } from '@/lib/store';
-import { getTimeline, getMediaStats } from '@/lib/api';
-import { ChevronRight } from 'lucide-react';
+import { getMedia, getMediaStats } from '@/lib/api';
+import { ChevronRight, Filter, LayoutGrid, List } from 'lucide-react';
 
 interface TimelineGroup {
   year: number;
@@ -15,21 +15,38 @@ interface TimelineGroup {
   items: any[];
 }
 
-export default function TimelinePage() {
-  const [groups, setGroups] = useState<TimelineGroup[]>([]);
+export default function MediaBrowser() {
+  // View State
+  const [viewType, setViewType] = useState<'timeline' | 'gallery'>('timeline');
+  const [activeSources, setActiveSources] = useState<Set<string>>(new Set());
+  
+  // Data State
+  const [timelineGroups, setTimelineGroups] = useState<TimelineGroup[]>([]);
+  const [galleryItems, setGalleryItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [stats, setStats] = useState<any>(null);
   
-  // State for collapsible hierarchies
+  // Timeline Hierarchy State
   const [collapsedYears, setCollapsedYears] = useState<Set<number>>(new Set());
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
   const [hasInitializedState, setHasInitializedState] = useState(false);
+
+  // Gallery Sticky Date State
+  const [activeDateHeader, setActiveDateHeader] = useState<string | null>(null);
   
-  const { activeFilter, deletedMediaIds } = useAppStore();
+  const { activeFilter } = useAppStore();
   const observerRef = useRef<HTMLDivElement>(null);
+  const galleryContainerRef = useRef<HTMLDivElement>(null);
+
+  // Available Sources Configuration (can be fetched from API later)
+  const availableSources = [
+    { id: 'iphone', label: 'iPhone' },
+    { id: 'mac', label: 'Mac' },
+    { id: 'windows', label: 'Windows' }
+  ];
 
   const fetchPage = useCallback(async (pageNum: number, reset: boolean = false) => {
     if (reset) {
@@ -39,67 +56,85 @@ export default function TimelinePage() {
     }
 
     try {
-      const params: any = { page: pageNum, per_page: 80 };
+      const params: any = { 
+        page: pageNum, 
+        per_page: viewType === 'gallery' ? 100 : 80,
+        view: viewType
+      };
+      
       if (activeFilter) params.media_type = activeFilter;
+      if (activeSources.size > 0) {
+        params.sources = Array.from(activeSources).join(',');
+      }
 
-      const data = await getTimeline(params);
+      const data = await getMedia(params);
 
-      if (reset) {
-        // Fresh load — replace all data
-        setGroups(data.groups);
-      } else {
-        // Append — merge into existing groups, dedup by ID safely
-        setGroups(prev => {
-          const merged = prev.map(g => ({ ...g, items: [...g.items] }));
-          
-          for (const group of data.groups) {
-            const key = `${group.year}-${group.month}`;
-            const existing = merged.find(g => `${g.year}-${g.month}` === key);
-            
-            if (existing) {
-              const existingIds = new Set(existing.items.map((i: any) => i.id));
-              const newItems = group.items.filter((item: any) => !existingIds.has(item.id));
-              existing.items.push(...newItems);
-            } else if (group.items.length > 0) {
-              merged.push({ ...group });
+      if (viewType === 'timeline') {
+        if (reset) {
+          setTimelineGroups(data.groups || []);
+        } else {
+          setTimelineGroups(prev => {
+            const merged = prev.map(g => ({ ...g, items: [...g.items] }));
+            for (const group of data.groups) {
+              const key = `${group.year}-${group.month}`;
+              const existing = merged.find(g => `${g.year}-${g.month}` === key);
+              if (existing) {
+                const existingIds = new Set(existing.items.map((i: any) => i.id));
+                const newItems = group.items.filter((item: any) => !existingIds.has(item.id));
+                existing.items.push(...newItems);
+              } else if (group.items.length > 0) {
+                merged.push({ ...group });
+              }
             }
-          }
-          // Sort groups descending by date
-          merged.sort((a, b) => {
-            if (a.year !== b.year) return b.year - a.year;
-            return b.month - a.month;
+            merged.sort((a, b) => {
+              if (a.year !== b.year) return b.year - a.year;
+              return b.month - a.month;
+            });
+            return merged;
           });
-          return merged;
-        });
+        }
+      } else {
+        // Gallery View
+        if (reset) {
+          setGalleryItems(data.items || []);
+        } else {
+          setGalleryItems(prev => {
+            const existingIds = new Set(prev.map(i => i.id));
+            const newItems = (data.items || []).filter((item: any) => !existingIds.has(item.id));
+            return [...prev, ...newItems];
+          });
+        }
       }
 
       setHasMore(pageNum < data.total_pages);
     } catch (error) {
-      console.error('Failed to fetch timeline:', error);
+      console.error('Failed to fetch media:', error);
     } finally {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [activeFilter]);
+  }, [activeFilter, viewType, activeSources]);
 
-  // Reset when filter changes
+  // Reset when filter, viewType, or sources change
   useEffect(() => {
     setPage(1);
-    setGroups([]);
+    setTimelineGroups([]);
+    setGalleryItems([]);
     setHasMore(true);
-    setHasInitializedState(false); // Re-initialize collapse states for new filter
+    setHasInitializedState(false);
     fetchPage(1, true);
-  }, [activeFilter]); // intentionally exclude fetchPage to avoid loops
+  }, [activeFilter, viewType, activeSources]);
 
   useEffect(() => {
     getMediaStats().then(setStats).catch(console.error);
   }, []);
 
-  // Transform flat month groups into year-based groups
+  // Transform flat month groups into year-based groups for Timeline
   const yearGroups = useMemo(() => {
+    if (viewType !== 'timeline') return [];
     const grouped = new Map<number, { year: number; months: TimelineGroup[]; totalItems: number }>();
     
-    for (const group of groups) {
+    for (const group of timelineGroups) {
       if (!grouped.has(group.year)) {
         grouped.set(group.year, { year: group.year, months: [], totalItems: 0 });
       }
@@ -109,13 +144,12 @@ export default function TimelinePage() {
     }
     
     return Array.from(grouped.values()).sort((a, b) => b.year - a.year);
-  }, [groups]);
+  }, [timelineGroups, viewType]);
 
-  // Auto-collapse logic on initial load
+  // Auto-collapse logic for Timeline
   useEffect(() => {
-    if (yearGroups.length > 0 && !hasInitializedState) {
+    if (viewType === 'timeline' && yearGroups.length > 0 && !hasInitializedState) {
       const latestYear = yearGroups[0].year;
-      // Since yearGroups are sorted descending, [0] is the most recent
       const latestMonthKey = `${yearGroups[0].months[0].year}-${yearGroups[0].months[0].month}`;
       
       const newCollapsedYears = new Set<number>();
@@ -126,20 +160,17 @@ export default function TimelinePage() {
           newCollapsedYears.add(yg.year);
         }
       }
-      
-      // Expand only the very first month by default
       newExpandedMonths.add(latestMonthKey);
       
       setCollapsedYears(newCollapsedYears);
       setExpandedMonths(newExpandedMonths);
       setHasInitializedState(true);
     }
-  }, [yearGroups, hasInitializedState]);
+  }, [yearGroups, hasInitializedState, viewType]);
 
-  // Infinite scroll with debounce guard
+  // Infinite scroll
   useEffect(() => {
     if (!observerRef.current) return;
-
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && hasMore && !loading && !loadingMore) {
@@ -152,10 +183,42 @@ export default function TimelinePage() {
       },
       { threshold: 0.1 }
     );
-
     observer.observe(observerRef.current);
     return () => observer.disconnect();
   }, [hasMore, loading, loadingMore, fetchPage]);
+
+  // Gallery Sticky Date Observer
+  useEffect(() => {
+    if (viewType !== 'gallery' || galleryItems.length === 0) return;
+    
+    const handleScroll = () => {
+      const elements = document.querySelectorAll('[data-date]');
+      let activeDate = null;
+      
+      // Find the first element that is at or above the top of the viewport (with offset)
+      for (let i = 0; i < elements.length; i++) {
+        const rect = elements[i].getBoundingClientRect();
+        if (rect.top <= 120) {
+          activeDate = elements[i].getAttribute('data-date');
+        } else {
+          break; // Since they are ordered, we can stop once we find one below the threshold
+        }
+      }
+      
+      if (!activeDate && elements.length > 0) {
+        // If scrolled to top, just use the first item's date
+        activeDate = elements[0].getAttribute('data-date');
+      }
+      
+      setActiveDateHeader(activeDate);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    // Initial check
+    setTimeout(handleScroll, 100);
+    
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [viewType, galleryItems]);
 
   const toggleYear = (year: number) => {
     setCollapsedYears(prev => {
@@ -175,6 +238,15 @@ export default function TimelinePage() {
     });
   };
 
+  const toggleSource = (sourceId: string) => {
+    setActiveSources(prev => {
+      const next = new Set(prev);
+      if (next.has(sourceId)) next.delete(sourceId);
+      else next.add(sourceId);
+      return next;
+    });
+  };
+
   const filterLabel = activeFilter
     ? activeFilter.charAt(0).toUpperCase() + activeFilter.slice(1) + 's'
     : 'All Media';
@@ -182,128 +254,170 @@ export default function TimelinePage() {
   return (
     <div className="min-h-screen">
       <TopBar
-        title="Timeline"
+        title="Library"
         subtitle={stats ? `${stats.total_files.toLocaleString()} items · ${stats.total_size_human}` : undefined}
       />
 
-      <div className="px-4 lg:px-6 pb-8">
-        {/* Filter badge */}
-        {activeFilter && (
+      <div className="px-4 lg:px-6 pb-8 sticky top-[72px] z-30 bg-[#0a0a0b]/80 backdrop-blur-xl py-4 border-b border-white/5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          
+          {/* View Toggles */}
+          <div className="flex items-center gap-2 bg-white/5 p-1 rounded-xl w-fit">
+            <button
+              onClick={() => setViewType('timeline')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                viewType === 'timeline' 
+                  ? 'bg-synaps-500 text-white shadow-lg' 
+                  : 'text-gray-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <List size={16} /> Timeline
+            </button>
+            <button
+              onClick={() => setViewType('gallery')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                viewType === 'gallery' 
+                  ? 'bg-synaps-500 text-white shadow-lg' 
+                  : 'text-gray-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <LayoutGrid size={16} /> Gallery
+            </button>
+          </div>
+
+          {/* Source Filters */}
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+            <div className="text-gray-400 text-sm font-medium flex items-center gap-1.5 mr-2">
+              <Filter size={14} /> Sources:
+            </div>
+            {availableSources.map(source => (
+              <button
+                key={source.id}
+                onClick={() => toggleSource(source.id)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all border ${
+                  activeSources.has(source.id)
+                    ? 'bg-synaps-500/20 text-synaps-400 border-synaps-500/30'
+                    : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10'
+                }`}
+              >
+                {source.label}
+              </button>
+            ))}
+          </div>
+
+        </div>
+      </div>
+
+      {/* Gallery Sticky Date Overlay */}
+      <AnimatePresence>
+        {viewType === 'gallery' && activeDateHeader && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mt-4 mb-2"
+            exit={{ opacity: 0 }}
+            className="fixed top-[150px] left-1/2 -translate-x-1/2 z-40"
           >
-            <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium
-              bg-synaps-500/10 text-synaps-600 dark:text-synaps-400 border border-synaps-500/20">
-              Showing: {filterLabel}
-            </span>
+            <div className="bg-white/10 backdrop-blur-xl border border-white/10 text-white px-4 py-1.5 rounded-full text-sm font-medium shadow-2xl">
+              {activeDateHeader}
+            </div>
           </motion.div>
         )}
+      </AnimatePresence>
 
-        {/* Two-Level Timeline Hierarchy */}
-        <div className="space-y-8 mt-6">
-          {yearGroups.map((yearGroup) => {
-            const yearCollapsed = collapsedYears.has(yearGroup.year);
+      <div className="px-4 lg:px-6 pb-8 mt-6">
+        
+        {viewType === 'timeline' ? (
+          /* TIMELINE VIEW */
+          <div className="space-y-8">
+            {yearGroups.map((yearGroup) => {
+              const yearCollapsed = collapsedYears.has(yearGroup.year);
 
-            return (
-              <div key={yearGroup.year} className="space-y-4">
-                {/* Year Header */}
-                <div className="flex items-center gap-3 w-full">
-                  <button
-                    onClick={() => toggleYear(yearGroup.year)}
-                    className="flex items-center gap-2 group text-left shrink-0 focus:outline-none"
-                  >
-                    <motion.div
-                      animate={{ rotate: yearCollapsed ? 0 : 90 }}
-                      transition={{ duration: 0.2 }}
-                      className="bg-gray-100 dark:bg-white/[0.05] rounded-full p-1 group-hover:bg-gray-200 dark:group-hover:bg-white/[0.1] transition-colors"
+              return (
+                <div key={yearGroup.year} className="space-y-4">
+                  <div className="flex items-center gap-3 w-full">
+                    <button
+                      onClick={() => toggleYear(yearGroup.year)}
+                      className="flex items-center gap-2 group text-left shrink-0 focus:outline-none"
                     >
-                      <ChevronRight size={16} className="text-gray-500 dark:text-gray-400" />
-                    </motion.div>
-                    <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">
-                      {yearGroup.year === 0 ? "Old Photos" : yearGroup.year}
-                    </h1>
-                  </button>
-                  <div className="h-px bg-gray-200 dark:bg-white/10 flex-1 ml-2" />
-                  <span className="text-xs font-medium text-gray-400 shrink-0">
-                    {yearGroup.totalItems.toLocaleString()} items
-                  </span>
-                </div>
-
-                {/* Months Loop */}
-                {!yearCollapsed && (
-                  <div className="pl-3 lg:pl-6 space-y-6">
-                    {yearGroup.months.map((group) => {
-                      const key = `${group.year}-${group.month}`;
-                      const monthExpanded = expandedMonths.has(key);
-
-                      return (
-                        <section key={key} style={{ contentVisibility: 'auto' }}>
-                          {/* Sticky month header */}
-                          <button
-                            onClick={() => toggleMonth(key)}
-                            className="month-header flex items-center gap-2 group w-full text-left
-                              bg-white/60 dark:bg-[#0a0a0b]/60 backdrop-blur-xl py-2 focus:outline-none"
-                          >
-                            <motion.div
-                              animate={{ rotate: monthExpanded ? 90 : 0 }}
-                              transition={{ duration: 0.2 }}
-                            >
-                              <ChevronRight size={14} className="text-gray-400 group-hover:text-synaps-500 transition-colors" />
-                            </motion.div>
-                            <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-                              {yearGroup.year === 0 ? "Archive" : `${group.month_name} ${group.year}`}
-                            </h2>
-                            <span className="text-xs text-gray-400 dark:text-gray-500">
-                              {group.items.length} items
-                            </span>
-                          </button>
-
-                          {/* Media grid */}
-                          {monthExpanded && (
-                            <div className="pt-2">
-                              <MediaGrid items={group.items.filter((item: any) => !deletedMediaIds.has(item.id))} />
-                            </div>
-                          )}
-                        </section>
-                      );
-                    })}
+                      <motion.div
+                        animate={{ rotate: yearCollapsed ? 0 : 90 }}
+                        transition={{ duration: 0.2 }}
+                        className="bg-gray-100 dark:bg-white/[0.05] rounded-full p-1 group-hover:bg-gray-200 dark:group-hover:bg-white/[0.1] transition-colors"
+                      >
+                        <ChevronRight size={16} className="text-gray-500 dark:text-gray-400" />
+                      </motion.div>
+                      <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">
+                        {yearGroup.year === 0 ? "Old Photos" : yearGroup.year}
+                      </h1>
+                    </button>
+                    <div className="h-px bg-gray-200 dark:bg-white/10 flex-1 ml-2" />
+                    <span className="text-xs font-medium text-gray-400 shrink-0">
+                      {yearGroup.totalItems.toLocaleString()} items
+                    </span>
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
 
-        {/* Loading indicator */}
-        {(loading || loadingMore) && (
-          <div className="flex justify-center py-8">
-            <div className="w-8 h-8 rounded-full border-2 border-synaps-500/20 border-t-synaps-500 animate-spin" />
+                  {!yearCollapsed && (
+                    <div className="pl-3 lg:pl-6 space-y-6">
+                      {yearGroup.months.map((group) => {
+                        const key = `${group.year}-${group.month}`;
+                        const monthExpanded = expandedMonths.has(key);
+
+                        return (
+                          <section key={key} style={{ contentVisibility: 'auto' }}>
+                            <button
+                              onClick={() => toggleMonth(key)}
+                              className="month-header flex items-center gap-2 group w-full text-left
+                                bg-[#0a0a0b]/60 backdrop-blur-xl py-2 focus:outline-none"
+                            >
+                              <motion.div
+                                animate={{ rotate: monthExpanded ? 90 : 0 }}
+                                transition={{ duration: 0.2 }}
+                              >
+                                <ChevronRight size={14} className="text-gray-500 dark:text-gray-400" />
+                              </motion.div>
+                              <h2 className="text-base font-semibold text-gray-800 dark:text-gray-200">
+                                {group.year === 0 ? "Archive" : group.month_name}
+                              </h2>
+                              <span className="text-xs text-gray-500 ml-2">{group.items.length} items</span>
+                            </button>
+
+                            {monthExpanded && (
+                              <div className="mt-4">
+                                <MediaGrid items={group.items} layout="grid" />
+                              </div>
+                            )}
+                          </section>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* GALLERY VIEW */
+          <div className="w-full">
+            <MediaGrid 
+              items={galleryItems} 
+              layout="grid" 
+            />
           </div>
         )}
 
-        {/* Empty state */}
-        {!loading && groups.length === 0 && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="flex flex-col items-center justify-center py-20"
-          >
-            <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-synaps-500/20 to-synaps-700/20 flex items-center justify-center mb-5">
-              <span className="text-3xl">📸</span>
+        {/* Loading Indicator & Infinite Scroll Target */}
+        <div ref={observerRef} className="h-20 flex items-center justify-center mt-8">
+          {(loading || loadingMore) && (
+            <div className="flex gap-2">
+              <div className="w-2 h-2 bg-synaps-500 rounded-full animate-bounce [animation-delay:-0.3s]" />
+              <div className="w-2 h-2 bg-synaps-500 rounded-full animate-bounce [animation-delay:-0.15s]" />
+              <div className="w-2 h-2 bg-synaps-500 rounded-full animate-bounce" />
             </div>
-            <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-1">
-              No media yet
-            </h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 max-w-xs text-center">
-              Your timeline will populate once the scanner indexes your NAS files.
-            </p>
-          </motion.div>
-        )}
-
-        {/* Infinite scroll trigger */}
-        <div ref={observerRef} className="h-4" />
+          )}
+          {!hasMore && !loading && (timelineGroups.length > 0 || galleryItems.length > 0) && (
+            <p className="text-sm text-gray-500 dark:text-gray-400">You've reached the end</p>
+          )}
+        </div>
       </div>
     </div>
   );

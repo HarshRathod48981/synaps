@@ -14,9 +14,9 @@ PROJECT_ROOT = BASE_DIR.parent
 # Storage path - on NAS this would be /storage, locally use mock_storage
 STORAGE_PATH = os.getenv("SYNAPS_STORAGE_PATH", str(PROJECT_ROOT / "mock_storage"))
 
-# Whitelist directories for media timeline
+# Whitelist directories for media timeline (if empty, entire Vault is scanned)
 ALLOWED_SCAN_PATHS = [
-    os.path.join(STORAGE_PATH, "Vault", "Harsh", "Iphone")
+    # os.path.join(STORAGE_PATH, "Vault", "Harsh", "Iphone")
 ]
 
 # Database
@@ -55,3 +55,14 @@ IMPORT_OLD_PHOTOS_CUTOFF = 2024  # Dates before this year → Old_Photos/
 # Scanner settings
 SCAN_BATCH_SIZE = 100
 MAX_CONCURRENT_THUMBNAILS = 2  # Low for Core2Duo
+
+# Timeline Settings
+ARCHIVE_CUTOFF_YEAR = 2024  # Media taken before this year automatically goes to "Old Photos" in Timeline
+
+# Source Mapping
+# Maps the root Vault folder names to a normalized internal source identifier
+SOURCE_MAPPING = {
+    "Iphone": "iphone",
+    "Mac": "mac",
+    "Windows_laptop-HP": "windows",
+}

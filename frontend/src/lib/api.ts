@@ -19,7 +19,9 @@ async function fetchAPI(endpoint: string, options?: RequestInit) {
 }
 
 // Media / Timeline
-export async function getTimeline(params: {
+export async function getMedia(params: {
+  view?: string;
+  sources?: string;
   page?: number;
   per_page?: number;
   media_type?: string;
@@ -27,12 +29,14 @@ export async function getTimeline(params: {
   month?: number;
 }) {
   const searchParams = new URLSearchParams();
+  if (params.view) searchParams.set('view', params.view);
+  if (params.sources) searchParams.set('sources', params.sources);
   if (params.page) searchParams.set('page', String(params.page));
   if (params.per_page) searchParams.set('per_page', String(params.per_page));
   if (params.media_type) searchParams.set('media_type', params.media_type);
   if (params.year) searchParams.set('year', String(params.year));
   if (params.month) searchParams.set('month', String(params.month));
-  return fetchAPI(`/media/timeline?${searchParams.toString()}`);
+  return fetchAPI(`/media?${searchParams.toString()}`);
 }
 
 export async function getMediaItem(id: string) {

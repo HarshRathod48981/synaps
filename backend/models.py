@@ -20,6 +20,7 @@ class MediaFile(Base):
     path = Column(String, nullable=False, unique=True, index=True)
     relative_path = Column(String, nullable=False)
     directory = Column(String, nullable=False, index=True)
+    source = Column(String, index=True)
     extension = Column(String, nullable=False, index=True)
     mime_type = Column(String)
     file_size = Column(Integer, default=0)

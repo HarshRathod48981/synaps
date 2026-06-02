@@ -18,6 +18,7 @@ interface MediaItem {
   file_url: string;
   stream_url?: string;
   duration?: number;
+  date_string?: string;
 }
 
 interface MediaGridProps {
@@ -72,6 +73,7 @@ function MediaThumbnail({ item, index }: { item: MediaItem; index: number }) {
       transition={{ delay: Math.min(index * 0.02, 0.5), duration: 0.3 }}
       className="media-thumb group"
       onClick={() => openViewer(item.id)}
+      data-date={item.date_string}
     >
       {/* Skeleton */}
       {!loaded && !error && (
