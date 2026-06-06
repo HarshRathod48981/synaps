@@ -19,6 +19,13 @@ ALLOWED_SCAN_PATHS = [
     # os.path.join(STORAGE_PATH, "Vault", "Harsh", "Iphone")
 ]
 
+# Blacklist directories that should be skipped during scanning
+# Paths should be relative to STORAGE_PATH
+EXCLUDED_PATHS = [
+    "Vault/Windows_laptop-HP",
+    "Vault/Harsh/Mac/Private",
+]
+
 # Database
 DATABASE_URL = os.getenv("SYNAPS_DB_URL", f"sqlite:///{BASE_DIR / 'synaps.db'}")
 

@@ -15,11 +15,15 @@ from sqlalchemy.orm import Session
 from config import (
     STORAGE_PATH, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS,
     DOCUMENT_EXTENSIONS, RAW_EXTENSIONS, ALL_MEDIA_EXTENSIONS,
-    SCAN_BATCH_SIZE, ALLOWED_SCAN_PATHS, SOURCE_MAPPING
+    SCAN_BATCH_SIZE, ALLOWED_SCAN_PATHS, SOURCE_MAPPING,
+    EXCLUDED_PATHS
 )
 from models import MediaFile
 
 logger = logging.getLogger("synaps.scanner")
+
+# Normalize excluded paths
+NORMALIZED_EXCLUDED_PATHS = [os.path.normpath(p) for p in EXCLUDED_PATHS]
 
 # Try to import exifread for EXIF metadata
 try:
@@ -276,6 +280,18 @@ def scan_directory(db: Session, force_rescan: bool = False) -> dict:
         logger.info(f"Scanning: {base_path}")
 
         for root, dirs, files in os.walk(base_path):
+            rel_root = os.path.relpath(root, STORAGE_PATH)
+            is_root_excluded = False
+            for ep in NORMALIZED_EXCLUDED_PATHS:
+                if rel_root == ep or rel_root.startswith(ep + os.sep):
+                    is_root_excluded = True
+                    break
+            
+            if is_root_excluded:
+                dirs[:] = []  # Stop recursion
+                logger.debug(f"Skipping excluded directory: {rel_root}")
+                continue
+
             # Skip hidden directories and system dirs
             dirs[:] = [d for d in dirs if not d.startswith('.') and d not in {
                 'thumbnails', 'trash', 'venv', '__pycache__',
@@ -364,9 +380,19 @@ def scan_directory(db: Session, force_rescan: bool = False) -> dict:
     all_media = db.query(MediaFile).all()
     stale_count = 0
     for media in all_media:
-        if not os.path.exists(media.path):
+        is_excluded = False
+        if media.relative_path:
+            norm_rel_path = os.path.normpath(media.relative_path)
+            for ep in NORMALIZED_EXCLUDED_PATHS:
+                if norm_rel_path == ep or norm_rel_path.startswith(ep + os.sep):
+                    is_excluded = True
+                    break
+
+        if not os.path.exists(media.path) or is_excluded:
             db.delete(media)
             stale_count += 1
+            if is_excluded and os.path.exists(media.path):
+                logger.info(f"Deleted excluded record from database: {media.relative_path}")
             
     if stale_count > 0:
         db.commit()

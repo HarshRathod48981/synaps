@@ -13,6 +13,9 @@ import logging
 from collections import defaultdict
 from database import SessionLocal
 from models import MediaFile
+from config import EXCLUDED_PATHS
+
+NORMALIZED_EXCLUDED_PATHS = [os.path.normpath(p) for p in EXCLUDED_PATHS]
 
 logger = logging.getLogger("synaps.cleaner")
 
@@ -55,7 +58,15 @@ def clean_database(dry_run: bool):
                 hash_map[media.file_hash].append(media)
             path_map[media.path].append(media)
             
-            if not os.path.exists(media.path):
+            is_excluded = False
+            if media.relative_path:
+                norm_rel_path = os.path.normpath(media.relative_path)
+                for ep in NORMALIZED_EXCLUDED_PATHS:
+                    if norm_rel_path == ep or norm_rel_path.startswith(ep + os.sep):
+                        is_excluded = True
+                        break
+
+            if not os.path.exists(media.path) or is_excluded:
                 missing_records.append(media)
             else:
                 valid_records.append(media)
