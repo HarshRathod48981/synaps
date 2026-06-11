@@ -10,7 +10,7 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
-  themeColor: '#0a0a0b',
+  themeColor: '#0c0a1a',
 };
 
 // Client component wrapper must be imported before use
@@ -29,7 +29,7 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </head>
-      <body className="bg-white dark:bg-[#0a0a0b] text-gray-900 dark:text-gray-100 min-h-screen antialiased">
+      <body>
         <AppShell>{children}</AppShell>
       </body>
     </html>

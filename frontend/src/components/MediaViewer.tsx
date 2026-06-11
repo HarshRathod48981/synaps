@@ -21,8 +21,8 @@ export function MediaViewer() {
     if (viewerMediaId) {
       setLoading(true);
       setZoom(1);
-      setShowInfo(false); // Reset info panel state on new image
-      setImageError(false); // Reset error state on new image
+      setShowInfo(false);
+      setImageError(false);
       getMediaItem(viewerMediaId)
         .then(setMedia)
         .catch(console.error)
@@ -33,7 +33,6 @@ export function MediaViewer() {
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (!viewerOpen) return;
     if (e.key === 'Escape') {
-      // If info panel is open, close it first. Otherwise close the whole viewer.
       if (showInfo) {
         setShowInfo(false);
       } else {
@@ -75,48 +74,59 @@ export function MediaViewer() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[100] bg-black/95 flex flex-col"
+        className="fixed inset-0 z-[100] flex flex-col"
+        style={{
+          background: 'rgba(5, 3, 12, 0.95)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+        }}
       >
-        {/* Top bar */}
+        {/* Top bar — glass */}
         <motion.div
           initial={{ y: -20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          className="flex items-center justify-between px-4 py-3 bg-black/50 backdrop-blur-xl"
+          className="flex items-center justify-between px-4 py-3"
+          style={{
+            background: 'rgba(15, 12, 30, 0.6)',
+            backdropFilter: 'blur(40px) saturate(180%)',
+            WebkitBackdropFilter: 'blur(40px) saturate(180%)',
+            borderBottom: '1px solid var(--glass-border)',
+          }}
         >
-          <button onClick={closeViewer} className="p-2 rounded-xl hover:bg-white/10 transition-colors">
-            <X size={20} className="text-white" />
+          <button onClick={closeViewer} className="p-2 rounded-xl hover:bg-[var(--glass-bg-hover)] transition-colors">
+            <X size={20} className="text-[var(--text-secondary)]" />
           </button>
 
-          <div className="text-sm text-white/70 truncate max-w-[50%]">
+          <div className="text-[13px] text-[var(--text-secondary)] truncate max-w-[50%] font-medium">
             {media?.filename}
           </div>
 
-          <div className="flex items-center gap-1">
-            <button onClick={() => setZoom(z => Math.min(z + 0.25, 5))} className="p-2 rounded-xl hover:bg-white/10 transition-colors">
-              <ZoomIn size={18} className="text-white/70" />
+          <div className="flex items-center gap-0.5">
+            <button onClick={() => setZoom(z => Math.min(z + 0.25, 5))} className="p-2 rounded-xl hover:bg-[var(--glass-bg-hover)] transition-colors">
+              <ZoomIn size={17} className="text-[var(--text-tertiary)]" />
             </button>
-            <button onClick={() => setZoom(z => Math.max(z - 0.25, 0.5))} className="p-2 rounded-xl hover:bg-white/10 transition-colors">
-              <ZoomOut size={18} className="text-white/70" />
+            <button onClick={() => setZoom(z => Math.max(z - 0.25, 0.5))} className="p-2 rounded-xl hover:bg-[var(--glass-bg-hover)] transition-colors">
+              <ZoomOut size={17} className="text-[var(--text-tertiary)]" />
             </button>
-            <button onClick={handleFavorite} className="p-2 rounded-xl hover:bg-white/10 transition-colors">
+            <button onClick={handleFavorite} className="p-2 rounded-xl hover:bg-[var(--glass-bg-hover)] transition-colors">
               <Star
-                size={18}
-                className={media?.is_favorite ? 'text-amber-400' : 'text-white/70'}
+                size={17}
+                className={media?.is_favorite ? 'text-amber-400' : 'text-[var(--text-tertiary)]'}
                 fill={media?.is_favorite ? 'currentColor' : 'none'}
               />
             </button>
-            <button onClick={() => setShowInfo(!showInfo)} className="p-2 rounded-xl hover:bg-white/10 transition-colors">
-              <Info size={18} className="text-white/70" />
+            <button onClick={() => setShowInfo(!showInfo)} className="p-2 rounded-xl hover:bg-[var(--glass-bg-hover)] transition-colors">
+              <Info size={17} className="text-[var(--text-tertiary)]" />
             </button>
             <a
               href={media ? getFileUrl(media.id) : '#'}
               download
-              className="p-2 rounded-xl hover:bg-white/10 transition-colors"
+              className="p-2 rounded-xl hover:bg-[var(--glass-bg-hover)] transition-colors"
             >
-              <Download size={18} className="text-white/70" />
+              <Download size={17} className="text-[var(--text-tertiary)]" />
             </a>
-            <button onClick={handleDelete} className="p-2 rounded-xl hover:bg-white/10 transition-colors">
-              <Trash2 size={18} className="text-red-400/70" />
+            <button onClick={handleDelete} className="p-2 rounded-xl hover:bg-red-500/10 transition-colors">
+              <Trash2 size={17} className="text-red-400/60" />
             </button>
           </div>
         </motion.div>
@@ -124,7 +134,7 @@ export function MediaViewer() {
         {/* Content */}
         <div className="flex-1 flex items-center justify-center overflow-hidden relative">
           {loading ? (
-            <div className="w-12 h-12 rounded-full border-2 border-white/20 border-t-white/70 animate-spin" />
+            <div className="w-10 h-10 rounded-full border-2 border-[var(--accent)]/20 border-t-[var(--accent)] animate-spin" />
           ) : media?.media_type === 'video' ? (
             <video
               src={getStreamUrl(media.id)}
@@ -145,7 +155,15 @@ export function MediaViewer() {
                 />
                 {/* Only show unsupported banner for non-HEIC formats — HEIC is handled by backend transcoding */}
                 {!media.filename.toLowerCase().endsWith('.heic') && (
-                  <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md px-4 py-2 rounded-full flex items-center gap-2 text-white/80 text-xs border border-white/10">
+                  <div
+                    className="absolute top-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full flex items-center gap-2 text-[var(--text-secondary)] text-xs"
+                    style={{
+                      background: 'rgba(15, 12, 30, 0.7)',
+                      backdropFilter: 'blur(20px)',
+                      WebkitBackdropFilter: 'blur(20px)',
+                      border: '1px solid var(--glass-border)',
+                    }}
+                  >
                     <AlertCircle size={14} className="text-amber-400" />
                     Could not load full image. Showing preview.
                   </div>
@@ -163,28 +181,35 @@ export function MediaViewer() {
               />
             )
           ) : (
-            <div className="text-white/50 text-sm">Preview not available</div>
+            <div className="text-[var(--text-tertiary)] text-sm">Preview not available</div>
           )}
         </div>
 
         {/* Invisible overlay to close info panel when clicking outside */}
         {showInfo && (
-          <div 
-            className="absolute inset-0 z-10" 
-            onClick={() => setShowInfo(false)} 
+          <div
+            className="absolute inset-0 z-10"
+            onClick={() => setShowInfo(false)}
           />
         )}
 
-        {/* Info panel */}
+        {/* Info panel — glass */}
         <AnimatePresence>
           {showInfo && media && (
             <motion.div
               initial={{ x: 300 }}
               animate={{ x: 0 }}
               exit={{ x: 300 }}
-              className="absolute right-0 top-0 bottom-0 w-72 bg-black/80 backdrop-blur-2xl border-l border-white/10 p-5 overflow-y-auto z-20"
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="absolute right-0 top-0 bottom-0 w-72 p-5 overflow-y-auto z-20"
+              style={{
+                background: 'rgba(15, 12, 30, 0.8)',
+                backdropFilter: 'blur(64px) saturate(200%)',
+                WebkitBackdropFilter: 'blur(64px) saturate(200%)',
+                borderLeft: '1px solid var(--glass-border)',
+              }}
             >
-              <h3 className="text-sm font-semibold text-white mb-4">Details</h3>
+              <h3 className="text-[13px] font-semibold text-[var(--text-primary)] mb-4">Details</h3>
               <div className="space-y-3 text-xs">
                 {[
                   ['Filename', media.filename],
@@ -196,8 +221,8 @@ export function MediaViewer() {
                   ['Camera', media.camera_make ? `${media.camera_make} ${media.camera_model || ''}` : 'N/A'],
                 ].map(([label, value]) => (
                   <div key={label}>
-                    <div className="text-white/40 mb-0.5">{label}</div>
-                    <div className="text-white/80 break-all">{value}</div>
+                    <div className="text-[var(--text-tertiary)] mb-0.5 text-[11px]">{label}</div>
+                    <div className="text-[var(--text-secondary)] break-all">{value}</div>
                   </div>
                 ))}
               </div>

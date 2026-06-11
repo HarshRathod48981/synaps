@@ -65,10 +65,10 @@ export default function SearchPage() {
       <TopBar title="Search" />
 
       <div className="px-4 lg:px-6 py-6 max-w-3xl mx-auto">
-        {/* Search bar */}
+        {/* Search bar — glass */}
         <div className="relative mb-6">
           <div className="relative flex items-center">
-            <SearchIcon size={18} className="absolute left-4 text-gray-400" />
+            <SearchIcon size={18} className="absolute left-4 text-[var(--text-tertiary)]" />
             <input
               ref={inputRef}
               type="text"
@@ -77,43 +77,37 @@ export default function SearchPage() {
               onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
               onFocus={() => setShowSuggestions(true)}
               placeholder="Search files, folders, media..."
-              className="w-full pl-11 pr-10 py-3.5 rounded-2xl text-sm
-                bg-gray-100 dark:bg-white/[0.06]
-                border border-transparent focus:border-synaps-500/30
-                text-gray-900 dark:text-white placeholder:text-gray-400
-                outline-none transition-all duration-200"
+              className="glass-input pl-11 pr-10"
             />
             {query && (
               <button
                 onClick={() => { setQuery(''); setResults([]); setShowSuggestions(false); }}
-                className="absolute right-4 p-1 rounded-full hover:bg-black/5 dark:hover:bg-white/10"
+                className="absolute right-4 p-1 rounded-full hover:bg-[var(--glass-bg-hover)]"
               >
-                <X size={14} className="text-gray-400" />
+                <X size={14} className="text-[var(--text-tertiary)]" />
               </button>
             )}
           </div>
 
-          {/* Suggestions dropdown */}
+          {/* Suggestions dropdown — glass */}
           <AnimatePresence>
             {showSuggestions && (suggestions.files.length > 0 || suggestions.directories.length > 0) && (
               <motion.div
                 initial={{ opacity: 0, y: -4 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -4 }}
-                className="absolute top-full left-0 right-0 mt-2 rounded-2xl overflow-hidden z-30
-                  bg-white dark:bg-[#1c1c1f] border border-gray-200 dark:border-white/[0.08]
-                  shadow-xl"
+                className="absolute top-full left-0 right-0 mt-2 rounded-2xl overflow-hidden z-30 glass-panel-elevated"
               >
                 {suggestions.directories.map((dir) => (
                   <button
                     key={dir}
                     onClick={() => { setQuery(dir); handleSearch(dir); }}
                     className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm
-                      hover:bg-gray-50 dark:hover:bg-white/[0.04] transition-colors"
+                      hover:bg-[var(--glass-bg-hover)] transition-colors"
                   >
-                    <SearchIcon size={14} className="text-gray-400" />
-                    <span className="text-gray-700 dark:text-gray-300 truncate">{dir}</span>
-                    <ArrowRight size={12} className="text-gray-400 ml-auto" />
+                    <SearchIcon size={14} className="text-[var(--text-tertiary)]" />
+                    <span className="text-[var(--text-secondary)] truncate">{dir}</span>
+                    <ArrowRight size={12} className="text-[var(--text-muted)] ml-auto" />
                   </button>
                 ))}
                 {suggestions.files.map((file) => (
@@ -121,10 +115,10 @@ export default function SearchPage() {
                     key={file}
                     onClick={() => { setQuery(file); handleSearch(file); }}
                     className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm
-                      hover:bg-gray-50 dark:hover:bg-white/[0.04] transition-colors"
+                      hover:bg-[var(--glass-bg-hover)] transition-colors"
                   >
-                    <Clock size={14} className="text-gray-400" />
-                    <span className="text-gray-700 dark:text-gray-300 truncate">{file}</span>
+                    <Clock size={14} className="text-[var(--text-tertiary)]" />
+                    <span className="text-[var(--text-secondary)] truncate">{file}</span>
                   </button>
                 ))}
               </motion.div>
@@ -132,20 +126,15 @@ export default function SearchPage() {
           </AnimatePresence>
         </div>
 
-        {/* Quick filters */}
+        {/* Quick filters — glass pills */}
         <div className="flex gap-2 mb-6">
           {quickFilters.map((f) => {
-            const Icon = f.icon;
             const isActive = filter === f.key;
             return (
               <button
                 key={f.key ?? 'all'}
                 onClick={() => { setFilter(f.key); if (query) handleSearch(); }}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200
-                  ${isActive
-                    ? 'bg-synaps-500 text-white shadow-lg shadow-synaps-500/20'
-                    : 'bg-gray-100 dark:bg-white/[0.06] text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-white/[0.1]'
-                  }`}
+                className={`glass-pill ${isActive ? 'glass-pill-active' : ''}`}
               >
                 {f.label}
               </button>
@@ -156,11 +145,11 @@ export default function SearchPage() {
         {/* Results */}
         {loading ? (
           <div className="flex justify-center py-20">
-            <div className="w-8 h-8 rounded-full border-2 border-synaps-500/20 border-t-synaps-500 animate-spin" />
+            <div className="w-8 h-8 rounded-full border-2 border-[var(--accent)]/20 border-t-[var(--accent)] animate-spin" />
           </div>
         ) : results.length > 0 ? (
           <div>
-            <p className="text-xs text-gray-500 mb-3">{total} results found</p>
+            <p className="text-[11px] text-[var(--text-tertiary)] mb-3">{total} results found</p>
             <div className="space-y-1">
               {results.map((item) => (
                 <motion.button
@@ -169,9 +158,9 @@ export default function SearchPage() {
                   animate={{ opacity: 1 }}
                   onClick={() => openViewer(item.id)}
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl
-                    hover:bg-gray-50 dark:hover:bg-white/[0.03] transition-colors text-left"
+                    hover:bg-[var(--glass-bg-hover)] transition-colors text-left"
                 >
-                  <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800 shrink-0">
+                  <div className="w-10 h-10 rounded-lg overflow-hidden bg-[var(--glass-bg)] shrink-0 border border-[var(--glass-border)]">
                     <img
                       src={getThumbnailUrl(item.id)}
                       alt=""
@@ -180,10 +169,10 @@ export default function SearchPage() {
                     />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-900 dark:text-gray-100 truncate">{item.filename}</p>
-                    <p className="text-[10px] text-gray-400 truncate">{item.directory}</p>
+                    <p className="text-[13px] text-[var(--text-primary)] truncate">{item.filename}</p>
+                    <p className="text-[10px] text-[var(--text-tertiary)] truncate">{item.directory}</p>
                   </div>
-                  <span className="text-[10px] text-gray-400 uppercase shrink-0">
+                  <span className="text-[10px] text-[var(--text-muted)] uppercase shrink-0 font-medium">
                     {item.extension.replace('.', '')}
                   </span>
                 </motion.button>
@@ -192,14 +181,14 @@ export default function SearchPage() {
           </div>
         ) : query && !loading ? (
           <div className="flex flex-col items-center justify-center py-20">
-            <SearchIcon size={32} className="text-gray-300 dark:text-gray-600 mb-3" />
-            <p className="text-sm text-gray-500">No results for &ldquo;{query}&rdquo;</p>
+            <SearchIcon size={32} className="text-[var(--text-muted)] mb-3" />
+            <p className="text-sm text-[var(--text-tertiary)]">No results for &ldquo;{query}&rdquo;</p>
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-20">
-            <SearchIcon size={32} className="text-gray-300 dark:text-gray-600 mb-3" />
-            <p className="text-sm text-gray-500">Search your media library</p>
-            <p className="text-xs text-gray-400 mt-1">Search by filename, folder, or extension</p>
+            <SearchIcon size={32} className="text-[var(--text-muted)] mb-3" />
+            <p className="text-sm text-[var(--text-secondary)]">Search your media library</p>
+            <p className="text-[11px] text-[var(--text-tertiary)] mt-1">Search by filename, folder, or extension</p>
           </div>
         )}
       </div>

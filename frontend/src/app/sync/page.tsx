@@ -91,8 +91,8 @@ function ImportSection() {
         setProgress(p);
         if (p.status === 'complete') {
           stopPolling();
-          if (isPreview && p.preview_destinations) {
-            setPreviewResult(p.preview_destinations);
+          if (isPreview && (p as any).preview_destinations) {
+            setPreviewResult((p as any).preview_destinations);
             setImportState('previewed');
           } else if (!isPreview) {
             setImportState('complete');
@@ -129,9 +129,9 @@ function ImportSection() {
     setError(null);
     try {
       const result = await previewImports();
-      if (result.status === 'started' && result.job_id) {
-        setJobId(result.job_id);
-        startPolling(result.job_id, true);
+      if ((result as any).status === 'started' && (result as any).job_id) {
+        setJobId((result as any).job_id);
+        startPolling((result as any).job_id, true);
       } else {
         setPreviewResult(result);
         setImportState('previewed');
@@ -146,15 +146,9 @@ function ImportSection() {
     setError(null);
     try {
       const result = await executeImport();
-      if (result.status === 'already_running') {
-        setJobId(result.job_id);
-        setImportState('importing');
-        startPolling(result.job_id);
-      } else {
-        setJobId(result.job_id);
-        setImportState('importing');
-        startPolling(result.job_id);
-      }
+      setJobId(result.job_id);
+      setImportState('importing');
+      startPolling(result.job_id);
     } catch (err: any) {
       setImportState('error');
       setError(err.message || 'Import failed to start');
@@ -171,12 +165,11 @@ function ImportSection() {
     setError(null);
   };
 
-  // Folder icon with a nice gradient
   const folderIcon = (path: string) => {
-    if (path.startsWith('Timeline/')) return <FolderOpen size={15} className="text-synaps-400" />;
+    if (path.startsWith('Timeline/')) return <FolderOpen size={15} className="text-[var(--accent)]" />;
     if (path === 'Old_Photos') return <Camera size={15} className="text-amber-400" />;
-    if (path === 'Unknown_Date') return <FileQuestion size={15} className="text-gray-400" />;
-    return <FolderOpen size={15} className="text-gray-400" />;
+    if (path === 'Unknown_Date') return <FileQuestion size={15} className="text-[var(--text-tertiary)]" />;
+    return <FolderOpen size={15} className="text-[var(--text-tertiary)]" />;
   };
 
   return (
@@ -184,20 +177,18 @@ function ImportSection() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.1 }}
-      className="rounded-3xl p-8
-        bg-gradient-to-br from-emerald-500/[0.07] via-teal-600/[0.04] to-transparent
-        border border-emerald-500/10 dark:border-emerald-500/[0.08]"
+      className="glass-card"
     >
       {/* Header */}
-      <div className="flex items-center gap-3 mb-4">
-        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-700 flex items-center justify-center">
-          <Package size={22} className="text-white" />
+      <div className="flex items-center gap-3 mb-5">
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+          <Package size={20} className="text-white" />
         </div>
         <div>
-          <h2 className="text-base font-semibold text-gray-900 dark:text-white">
+          <h2 className="text-[14px] font-semibold text-[var(--text-primary)]">
             Imports
           </h2>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
+          <p className="text-[11px] text-[var(--text-tertiary)]">
             Organize media from import folder
           </p>
         </div>
@@ -206,32 +197,19 @@ function ImportSection() {
       <AnimatePresence mode="wait">
         {/* ── IDLE STATE ── */}
         {importState === 'idle' && (
-          <motion.div
-            key="idle"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6 leading-relaxed">
-              Scan your import folder to find new media waiting to be organized
-              into your library.
+          <motion.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <p className="text-[13px] text-[var(--text-secondary)] mb-5 leading-relaxed">
+              Scan your import folder to find new media waiting to be organized into your library.
             </p>
 
             {error && (
-              <div className="flex items-center gap-2 mb-4 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
-                <AlertTriangle size={14} className="text-amber-500 shrink-0" />
-                <p className="text-xs text-amber-600 dark:text-amber-400">{error}</p>
+              <div className="flex items-center gap-2 mb-4 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/15">
+                <AlertTriangle size={14} className="text-amber-400 shrink-0" />
+                <p className="text-[11px] text-amber-400/80">{error}</p>
               </div>
             )}
 
-            <button
-              onClick={handleScan}
-              className="w-full px-4 py-3 rounded-xl text-sm font-medium text-white
-                bg-gradient-to-r from-emerald-500 to-teal-600
-                hover:from-emerald-600 hover:to-teal-700
-                transition-all duration-200 shadow-lg shadow-emerald-500/20
-                flex items-center justify-center gap-2"
-            >
+            <button onClick={handleScan} className="w-full btn-accent justify-center py-3" style={{ background: 'linear-gradient(135deg, #10b981, #0d9488)' }}>
               <Scan size={16} />
               Scan Imports
             </button>
@@ -240,72 +218,43 @@ function ImportSection() {
 
         {/* ── SCANNING STATE ── */}
         {importState === 'scanning' && (
-          <motion.div
-            key="scanning"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="flex flex-col items-center py-6"
-          >
-            <Loader2 size={28} className="text-emerald-500 animate-spin mb-3" />
-            <p className="text-sm text-gray-500 dark:text-gray-400">Scanning import folder...</p>
+          <motion.div key="scanning" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center py-6">
+            <Loader2 size={28} className="text-emerald-400 animate-spin mb-3" />
+            <p className="text-[13px] text-[var(--text-tertiary)]">Scanning import folder...</p>
           </motion.div>
         )}
 
-        {/* ── SCANNED STATE (show stats) ── */}
+        {/* ── SCANNED STATE ── */}
         {importState === 'scanned' && scanResult && (
-          <motion.div
-            key="scanned"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-          >
-            {/* Stats cards */}
+          <motion.div key="scanned" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
             <div className="grid grid-cols-3 gap-3 mb-5">
-              <div className="rounded-xl bg-white/50 dark:bg-white/[0.04] border border-black/[0.04] dark:border-white/[0.04] p-3 text-center">
-                <p className="text-xl font-bold text-gray-900 dark:text-white">
-                  {scanResult.total_files}
-                </p>
-                <p className="text-[10px] uppercase tracking-wider text-gray-400 mt-0.5">
-                  files waiting
-                </p>
+              <div className="rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] p-3 text-center">
+                <p className="text-xl font-bold text-[var(--text-primary)]">{scanResult.total_files}</p>
+                <p className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] mt-0.5">files waiting</p>
               </div>
-              <div className="rounded-xl bg-white/50 dark:bg-white/[0.04] border border-black/[0.04] dark:border-white/[0.04] p-3 text-center">
+              <div className="rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] p-3 text-center">
                 <div className="flex items-center justify-center gap-1.5 mb-0.5">
                   <Camera size={13} className="text-blue-400" />
-                  <span className="text-xl font-bold text-gray-900 dark:text-white">
-                    {scanResult.photos}
-                  </span>
+                  <span className="text-xl font-bold text-[var(--text-primary)]">{scanResult.photos}</span>
                 </div>
-                <p className="text-[10px] uppercase tracking-wider text-gray-400">photos</p>
+                <p className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]">photos</p>
               </div>
-              <div className="rounded-xl bg-white/50 dark:bg-white/[0.04] border border-black/[0.04] dark:border-white/[0.04] p-3 text-center">
+              <div className="rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] p-3 text-center">
                 <div className="flex items-center justify-center gap-1.5 mb-0.5">
                   <Video size={13} className="text-purple-400" />
-                  <span className="text-xl font-bold text-gray-900 dark:text-white">
-                    {scanResult.videos}
-                  </span>
+                  <span className="text-xl font-bold text-[var(--text-primary)]">{scanResult.videos}</span>
                 </div>
-                <p className="text-[10px] uppercase tracking-wider text-gray-400">videos</p>
+                <p className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]">videos</p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 mb-5 px-3 py-2 rounded-xl bg-white/30 dark:bg-white/[0.03]">
-              <HardDrive size={14} className="text-gray-400" />
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                {scanResult.total_size_human}
-              </span>
-              <span className="text-xs text-gray-400">total size</span>
+            <div className="flex items-center gap-2 mb-5 px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)]">
+              <HardDrive size={14} className="text-[var(--text-tertiary)]" />
+              <span className="text-[13px] font-medium text-[var(--text-secondary)]">{scanResult.total_size_human}</span>
+              <span className="text-[11px] text-[var(--text-tertiary)]">total size</span>
             </div>
 
-            <button
-              onClick={handlePreview}
-              className="w-full px-4 py-3 rounded-xl text-sm font-medium text-white
-                bg-gradient-to-r from-emerald-500 to-teal-600
-                hover:from-emerald-600 hover:to-teal-700
-                transition-all duration-200 shadow-lg shadow-emerald-500/20
-                flex items-center justify-center gap-2"
-            >
+            <button onClick={handlePreview} className="w-full btn-accent justify-center py-3" style={{ background: 'linear-gradient(135deg, #10b981, #0d9488)' }}>
               <FolderInput size={16} />
               Preview Import
             </button>
@@ -314,43 +263,28 @@ function ImportSection() {
 
         {/* ── PREVIEWING STATE ── */}
         {importState === 'previewing' && (
-          <motion.div
-            key="previewing"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="flex flex-col items-center py-6"
-          >
-            <Loader2 size={28} className="text-emerald-500 animate-spin mb-3" />
-            <p className="text-sm text-gray-500 dark:text-gray-400">Extracting metadata & computing destinations...</p>
-            <p className="text-[11px] text-gray-400 mt-1">This may take a moment for large libraries</p>
+          <motion.div key="previewing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center py-6">
+            <Loader2 size={28} className="text-emerald-400 animate-spin mb-3" />
+            <p className="text-[13px] text-[var(--text-tertiary)]">Extracting metadata & computing destinations...</p>
+            <p className="text-[11px] text-[var(--text-muted)] mt-1">This may take a moment for large libraries</p>
             {progress && (
               <div className="w-full mt-4">
-                <div className="flex justify-between text-[10px] text-gray-400 mb-1">
+                <div className="flex justify-between text-[10px] text-[var(--text-tertiary)] mb-1">
                   <span>{progress.phase}</span>
                   <span>{progress.progress}%</span>
                 </div>
-                <div className="h-1 bg-gray-200 dark:bg-white/10 rounded-full overflow-hidden">
-                  <motion.div className="h-full bg-emerald-500" animate={{ width: `${progress.progress}%` }} />
+                <div className="h-1 bg-[var(--glass-bg-hover)] rounded-full overflow-hidden">
+                  <motion.div className="h-full bg-emerald-500 rounded-full" animate={{ width: `${progress.progress}%` }} />
                 </div>
               </div>
             )}
           </motion.div>
         )}
 
-        {/* ── PREVIEWED STATE (show destinations) ── */}
+        {/* ── PREVIEWED STATE ── */}
         {importState === 'previewed' && previewResult && (
-          <motion.div
-            key="previewed"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-          >
-            <div className="mb-1">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">
-                Import Preview
-              </h3>
-            </div>
+          <motion.div key="previewed" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+            <h3 className="text-[13px] font-semibold text-[var(--text-primary)] mb-3">Import Preview</h3>
 
             <div className="space-y-1 mb-5">
               {previewResult.destinations.map((dest, i) => (
@@ -360,46 +294,26 @@ function ImportSection() {
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.03 }}
                   className="flex items-center justify-between px-3 py-2.5 rounded-xl
-                    bg-white/50 dark:bg-white/[0.03] border border-black/[0.03] dark:border-white/[0.03]"
+                    bg-[var(--glass-bg)] border border-[var(--glass-border)]"
                 >
                   <div className="flex items-center gap-2.5">
                     {folderIcon(dest.path)}
-                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300 font-mono">
-                      {dest.path}
-                    </span>
+                    <span className="text-[11px] font-medium text-[var(--text-secondary)] font-mono">{dest.path}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <ArrowRight size={12} className="text-gray-300 dark:text-gray-600" />
-                    <span className="text-xs font-semibold text-gray-900 dark:text-white tabular-nums">
-                      {dest.count}
-                    </span>
-                    <span className="text-[10px] text-gray-400">
-                      {dest.count === 1 ? 'file' : 'files'}
-                    </span>
+                    <ArrowRight size={12} className="text-[var(--text-muted)]" />
+                    <span className="text-[12px] font-semibold text-[var(--text-primary)] tabular-nums">{dest.count}</span>
+                    <span className="text-[10px] text-[var(--text-tertiary)]">{dest.count === 1 ? 'file' : 'files'}</span>
                   </div>
                 </motion.div>
               ))}
             </div>
 
             <div className="flex gap-2">
-              <button
-                onClick={handleReset}
-                className="px-4 py-3 rounded-xl text-sm font-medium
-                  text-gray-600 dark:text-gray-400
-                  bg-gray-100 dark:bg-white/[0.05]
-                  hover:bg-gray-200 dark:hover:bg-white/[0.08]
-                  transition-all duration-200 flex-1"
-              >
+              <button onClick={handleReset} className="flex-1 px-4 py-3 rounded-xl text-[13px] font-medium text-[var(--text-secondary)] bg-[var(--glass-bg)] hover:bg-[var(--glass-bg-hover)] transition-all border border-[var(--glass-border)]">
                 Cancel
               </button>
-              <button
-                onClick={handleExecute}
-                className="px-4 py-3 rounded-xl text-sm font-medium text-white
-                  bg-gradient-to-r from-emerald-500 to-teal-600
-                  hover:from-emerald-600 hover:to-teal-700
-                  transition-all duration-200 shadow-lg shadow-emerald-500/20
-                  flex items-center justify-center gap-2 flex-[2]"
-              >
+              <button onClick={handleExecute} className="flex-[2] btn-accent justify-center py-3" style={{ background: 'linear-gradient(135deg, #10b981, #0d9488)' }}>
                 <FolderInput size={16} />
                 Start Import
               </button>
@@ -407,29 +321,18 @@ function ImportSection() {
           </motion.div>
         )}
 
-        {/* ── IMPORTING STATE (progress) ── */}
+        {/* ── IMPORTING STATE ── */}
         {importState === 'importing' && progress && (
-          <motion.div
-            key="importing"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-          >
+          <motion.div key="importing" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
             <div className="mb-5">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <Loader2 size={14} className="text-emerald-500 animate-spin" />
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    {progress.phase}
-                  </span>
+                  <Loader2 size={14} className="text-emerald-400 animate-spin" />
+                  <span className="text-[13px] font-medium text-[var(--text-secondary)]">{progress.phase}</span>
                 </div>
-                <span className="text-sm font-bold text-emerald-500 tabular-nums">
-                  {progress.progress}%
-                </span>
+                <span className="text-[13px] font-bold text-emerald-400 tabular-nums">{progress.progress}%</span>
               </div>
-
-              {/* Progress bar */}
-              <div className="h-2 rounded-full bg-gray-200 dark:bg-white/[0.06] overflow-hidden">
+              <div className="h-2 rounded-full bg-[var(--glass-bg)] overflow-hidden border border-[var(--glass-border)]">
                 <motion.div
                   className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-500"
                   initial={{ width: 0 }}
@@ -437,23 +340,20 @@ function ImportSection() {
                   transition={{ duration: 0.5, ease: 'easeOut' }}
                 />
               </div>
-
               {progress.total_files > 0 && (
-                <p className="text-[11px] text-gray-400 mt-2 tabular-nums">
+                <p className="text-[11px] text-[var(--text-tertiary)] mt-2 tabular-nums">
                   {progress.processed_files} / {progress.total_files} processed
                 </p>
               )}
             </div>
-
-            {/* Live stats during import */}
             <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="px-3 py-2 rounded-lg bg-white/30 dark:bg-white/[0.03]">
-                <span className="text-gray-400">Imported </span>
-                <span className="font-semibold text-emerald-500 tabular-nums">{progress.imported}</span>
+              <div className="px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)]">
+                <span className="text-[var(--text-tertiary)]">Imported </span>
+                <span className="font-semibold text-emerald-400 tabular-nums">{progress.imported}</span>
               </div>
-              <div className="px-3 py-2 rounded-lg bg-white/30 dark:bg-white/[0.03]">
-                <span className="text-gray-400">Skipped </span>
-                <span className="font-semibold text-amber-500 tabular-nums">{progress.duplicates_skipped}</span>
+              <div className="px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)]">
+                <span className="text-[var(--text-tertiary)]">Skipped </span>
+                <span className="font-semibold text-amber-400 tabular-nums">{progress.duplicates_skipped}</span>
               </div>
             </div>
           </motion.div>
@@ -461,66 +361,44 @@ function ImportSection() {
 
         {/* ── COMPLETE STATE ── */}
         {importState === 'complete' && progress && (
-          <motion.div
-            key="complete"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0 }}
-          >
+          <motion.div key="complete" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}>
             <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center">
-                <CheckCircle2 size={18} className="text-emerald-500" />
+              <div className="w-8 h-8 rounded-full bg-emerald-500/15 flex items-center justify-center">
+                <CheckCircle2 size={18} className="text-emerald-400" />
               </div>
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
-                Import Complete
-              </h3>
+              <h3 className="text-[13px] font-semibold text-[var(--text-primary)]">Import Complete</h3>
             </div>
 
             <div className="space-y-1.5 mb-5">
               {[
-                { label: 'Imported', value: progress.imported, color: 'text-emerald-500' },
-                { label: 'Duplicates Skipped', value: progress.duplicates_skipped, color: 'text-amber-500' },
-                { label: 'Unknown Date', value: progress.unknown_date, color: 'text-gray-400' },
-                { label: 'Errors', value: progress.errors, color: progress.errors > 0 ? 'text-red-500' : 'text-gray-400' },
+                { label: 'Imported', value: progress.imported, color: 'text-emerald-400' },
+                { label: 'Duplicates Skipped', value: progress.duplicates_skipped, color: 'text-amber-400' },
+                { label: 'Unknown Date', value: progress.unknown_date, color: 'text-[var(--text-tertiary)]' },
+                { label: 'Errors', value: progress.errors, color: progress.errors > 0 ? 'text-red-400' : 'text-[var(--text-tertiary)]' },
               ].map((stat) => (
-                <div
-                  key={stat.label}
-                  className="flex items-center justify-between px-3 py-2 rounded-xl
-                    bg-white/50 dark:bg-white/[0.03]"
-                >
-                  <span className="text-xs text-gray-500 dark:text-gray-400">{stat.label}</span>
-                  <span className={`text-sm font-semibold tabular-nums ${stat.color}`}>
-                    {stat.value}
-                  </span>
+                <div key={stat.label} className="flex items-center justify-between px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)]">
+                  <span className="text-[11px] text-[var(--text-tertiary)]">{stat.label}</span>
+                  <span className={`text-[13px] font-semibold tabular-nums ${stat.color}`}>{stat.value}</span>
                 </div>
               ))}
             </div>
 
             {progress.error_log && progress.error_log.length > 0 && (
-              <div className="mb-5 px-3 py-2 rounded-xl bg-gray-50 dark:bg-white/[0.03] max-h-40 overflow-y-auto border border-black/[0.03] dark:border-white/[0.03]">
-                <p className="text-[10px] font-semibold text-gray-500 mb-2 uppercase tracking-wider">Import Log</p>
+              <div className="mb-5 px-3 py-2 rounded-xl bg-[var(--glass-bg)] max-h-40 overflow-y-auto border border-[var(--glass-border)]">
+                <p className="text-[10px] font-semibold text-[var(--text-tertiary)] mb-2 uppercase tracking-wider">Import Log</p>
                 <div className="space-y-1">
                   {progress.error_log.map((log, i) => (
-                    <p key={i} className="text-[10px] text-gray-400 font-mono leading-relaxed">
-                      {log}
-                    </p>
+                    <p key={i} className="text-[10px] text-[var(--text-tertiary)] font-mono leading-relaxed">{log}</p>
                   ))}
                 </div>
               </div>
             )}
 
-            <p className="text-[11px] text-gray-400 text-center mb-4">
+            <p className="text-[11px] text-[var(--text-tertiary)] text-center mb-4">
               New media is now visible in your Timeline
             </p>
 
-            <button
-              onClick={handleReset}
-              className="w-full px-4 py-3 rounded-xl text-sm font-medium
-                text-gray-600 dark:text-gray-400
-                bg-gray-100 dark:bg-white/[0.05]
-                hover:bg-gray-200 dark:hover:bg-white/[0.08]
-                transition-all duration-200"
-            >
+            <button onClick={handleReset} className="w-full px-4 py-3 rounded-xl text-[13px] font-medium text-[var(--text-secondary)] bg-[var(--glass-bg)] hover:bg-[var(--glass-bg-hover)] transition-all border border-[var(--glass-border)]">
               Done
             </button>
           </motion.div>
@@ -528,36 +406,24 @@ function ImportSection() {
 
         {/* ── ERROR STATE ── */}
         {importState === 'error' && (
-          <motion.div
-            key="error"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <div className="flex items-center gap-2 mb-4 px-3 py-3 rounded-xl bg-red-500/10 border border-red-500/20">
-              <XCircle size={16} className="text-red-500 shrink-0" />
+          <motion.div key="error" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <div className="flex items-center gap-2 mb-4 px-3 py-3 rounded-xl bg-red-500/10 border border-red-500/15">
+              <XCircle size={16} className="text-red-400 shrink-0" />
               <div>
-                <p className="text-xs font-medium text-red-600 dark:text-red-400">Import Error</p>
-                <p className="text-[11px] text-red-500/70 mt-0.5">{error}</p>
+                <p className="text-[11px] font-medium text-red-400">Import Error</p>
+                <p className="text-[10px] text-red-400/60 mt-0.5">{error}</p>
               </div>
             </div>
 
             {progress && progress.errors > 0 && progress.error_log.length > 0 && (
-              <div className="mb-4 px-3 py-2 rounded-xl bg-white/30 dark:bg-white/[0.03] max-h-32 overflow-y-auto">
+              <div className="mb-4 px-3 py-2 rounded-xl bg-[var(--glass-bg)] max-h-32 overflow-y-auto border border-[var(--glass-border)]">
                 {progress.error_log.map((log, i) => (
-                  <p key={i} className="text-[10px] text-gray-400 font-mono py-0.5">{log}</p>
+                  <p key={i} className="text-[10px] text-[var(--text-tertiary)] font-mono py-0.5">{log}</p>
                 ))}
               </div>
             )}
 
-            <button
-              onClick={handleReset}
-              className="w-full px-4 py-3 rounded-xl text-sm font-medium
-                text-gray-600 dark:text-gray-400
-                bg-gray-100 dark:bg-white/[0.05]
-                hover:bg-gray-200 dark:hover:bg-white/[0.08]
-                transition-all duration-200"
-            >
+            <button onClick={handleReset} className="w-full px-4 py-3 rounded-xl text-[13px] font-medium text-[var(--text-secondary)] bg-[var(--glass-bg)] hover:bg-[var(--glass-bg-hover)] transition-all border border-[var(--glass-border)]">
               Try Again
             </button>
           </motion.div>
@@ -637,33 +503,27 @@ export default function SyncPage() {
     <div className="min-h-screen">
       <TopBar title="Sync" subtitle="Upload & Import Media" />
 
-      <div className="px-4 lg:px-6 py-6 max-w-2xl mx-auto space-y-6">
+      <div className="px-4 lg:px-6 py-6 max-w-2xl mx-auto space-y-5">
         {/* ── Import Manager Section ── */}
         <ImportSection />
 
-        {/* ── iPhone Sync Section (existing) ── */}
+        {/* ── iPhone Sync Section ── */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="rounded-3xl p-8
-            bg-gradient-to-br from-synaps-500/10 via-synaps-600/5 to-transparent
-            border border-synaps-500/10 dark:border-synaps-500/10"
+          className="glass-card"
         >
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-synaps-500 to-synaps-700 flex items-center justify-center">
-              <Smartphone size={22} className="text-white" />
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[var(--accent)] to-[var(--accent-dark)] flex items-center justify-center shadow-lg shadow-[var(--accent-glow)]">
+              <Smartphone size={20} className="text-white" />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-gray-900 dark:text-white">
-                iPhone Sync
-              </h2>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                Upload photos & videos to your NAS
-              </p>
+              <h2 className="text-[14px] font-semibold text-[var(--text-primary)]">iPhone Sync</h2>
+              <p className="text-[11px] text-[var(--text-tertiary)]">Upload photos & videos to your NAS</p>
             </div>
           </div>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-6 leading-relaxed">
+          <p className="text-[13px] text-[var(--text-secondary)] mb-5 leading-relaxed">
             Select photos and videos from your iPhone. Files are automatically organized
             by date and deduplicated. Only missing files will be uploaded.
           </p>
@@ -671,17 +531,13 @@ export default function SyncPage() {
           {/* Upload area */}
           <div
             onClick={() => fileInputRef.current?.click()}
-            className="relative border-2 border-dashed border-synaps-500/30 rounded-2xl p-8
+            className="relative border border-dashed border-[var(--accent)]/25 rounded-2xl p-8
               flex flex-col items-center justify-center cursor-pointer
-              hover:border-synaps-500/50 hover:bg-synaps-500/5 transition-all duration-200"
+              hover:border-[var(--accent)]/40 hover:bg-[var(--accent-muted)] transition-all duration-200"
           >
-            <CloudUpload size={32} className="text-synaps-500 mb-3" />
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Tap to select files
-            </p>
-            <p className="text-xs text-gray-400 mt-1">
-              Photos, Videos, HEIC, RAW supported
-            </p>
+            <CloudUpload size={28} className="text-[var(--accent)] mb-3" />
+            <p className="text-[13px] font-medium text-[var(--text-secondary)]">Tap to select files</p>
+            <p className="text-[11px] text-[var(--text-tertiary)] mt-1">Photos, Videos, HEIC, RAW supported</p>
             <input
               ref={fileInputRef}
               type="file"
@@ -698,26 +554,16 @@ export default function SyncPage() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
             {/* Stats bar */}
             <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3 text-xs">
-                <span className="text-gray-500">{stats.total} files</span>
-                {stats.success > 0 && (
-                  <span className="text-green-500">{stats.success} uploaded</span>
-                )}
-                {stats.duplicate > 0 && (
-                  <span className="text-amber-500">{stats.duplicate} duplicates</span>
-                )}
-                {stats.error > 0 && (
-                  <span className="text-red-500">{stats.error} failed</span>
-                )}
+              <div className="flex items-center gap-3 text-[11px]">
+                <span className="text-[var(--text-tertiary)]">{stats.total} files</span>
+                {stats.success > 0 && <span className="text-emerald-400">{stats.success} uploaded</span>}
+                {stats.duplicate > 0 && <span className="text-amber-400">{stats.duplicate} duplicates</span>}
+                {stats.error > 0 && <span className="text-red-400">{stats.error} failed</span>}
               </div>
               <button
                 onClick={startUpload}
                 disabled={isUploading || stats.pending === 0}
-                className="px-4 py-2 rounded-xl text-sm font-medium text-white
-                  bg-gradient-to-r from-synaps-500 to-synaps-600
-                  hover:from-synaps-600 hover:to-synaps-700
-                  disabled:opacity-50 disabled:cursor-not-allowed
-                  transition-all duration-200 shadow-lg shadow-synaps-500/20"
+                className="btn-accent text-[12px] py-2 px-4"
               >
                 {isUploading ? (
                   <span className="flex items-center gap-2">
@@ -738,32 +584,30 @@ export default function SyncPage() {
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     className="flex items-center gap-3 px-3 py-2.5 rounded-xl
-                      bg-gray-50 dark:bg-white/[0.03]"
+                      bg-[var(--glass-bg)] border border-[var(--glass-border)]"
                   >
                     {item.file.type.startsWith('video') ? (
-                      <Film size={16} className="text-purple-500 shrink-0" />
+                      <Film size={16} className="text-purple-400 shrink-0" />
                     ) : (
-                      <ImageIcon size={16} className="text-blue-500 shrink-0" />
+                      <ImageIcon size={16} className="text-blue-400 shrink-0" />
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs text-gray-900 dark:text-gray-100 truncate">
-                        {item.file.name}
-                      </p>
+                      <p className="text-[11px] text-[var(--text-primary)] truncate">{item.file.name}</p>
                       {item.status === 'uploading' && (
-                        <div className="mt-1 h-1 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                        <div className="mt-1 h-1 rounded-full bg-[var(--glass-bg-hover)] overflow-hidden">
                           <div className="upload-progress h-full" style={{ width: `${item.progress}%` }} />
                         </div>
                       )}
                       {item.message && (
-                        <p className="text-[10px] text-gray-400 mt-0.5">{item.message}</p>
+                        <p className="text-[10px] text-[var(--text-tertiary)] mt-0.5">{item.message}</p>
                       )}
                     </div>
                     <div className="shrink-0">
-                      {item.status === 'pending' && <Clock size={14} className="text-gray-400" />}
-                      {item.status === 'uploading' && <Loader2 size={14} className="text-synaps-500 animate-spin" />}
-                      {item.status === 'success' && <CheckCircle2 size={14} className="text-green-500" />}
-                      {item.status === 'duplicate' && <CheckCircle2 size={14} className="text-amber-500" />}
-                      {item.status === 'error' && <XCircle size={14} className="text-red-500" />}
+                      {item.status === 'pending' && <Clock size={14} className="text-[var(--text-muted)]" />}
+                      {item.status === 'uploading' && <Loader2 size={14} className="text-[var(--accent)] animate-spin" />}
+                      {item.status === 'success' && <CheckCircle2 size={14} className="text-emerald-400" />}
+                      {item.status === 'duplicate' && <CheckCircle2 size={14} className="text-amber-400" />}
+                      {item.status === 'error' && <XCircle size={14} className="text-red-400" />}
                     </div>
                   </motion.div>
                 ))}

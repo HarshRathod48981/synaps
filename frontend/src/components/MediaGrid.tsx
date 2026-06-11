@@ -42,7 +42,7 @@ function MediaThumbnail({ item, index }: { item: MediaItem; index: number }) {
           const url = getThumbnailUrl(item.id);
           const res = await fetch(url, { method: 'HEAD' });
           if (!mounted) return;
-          
+
           const contentType = res.headers.get('content-type');
           if (contentType && contentType.includes('svg')) {
             // Still generating, poll again
@@ -55,7 +55,7 @@ function MediaThumbnail({ item, index }: { item: MediaItem; index: number }) {
           // Ignore network errors during polling
         }
       };
-      
+
       // Start polling after a short delay
       timeoutId = setTimeout(checkThumbnail, 2000);
     }
@@ -68,9 +68,9 @@ function MediaThumbnail({ item, index }: { item: MediaItem; index: number }) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ delay: Math.min(index * 0.02, 0.5), duration: 0.3 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ delay: Math.min(index * 0.01, 0.3), duration: 0.25 }}
       className="media-thumb group"
       onClick={() => openViewer(item.id)}
       data-date={item.date_string}
@@ -92,30 +92,39 @@ function MediaThumbnail({ item, index }: { item: MediaItem; index: number }) {
 
       {/* Error fallback */}
       {error && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-800">
-          <span className="text-xs text-gray-400 uppercase">{item.extension.replace('.', '')}</span>
+        <div className="absolute inset-0 flex items-center justify-center bg-[var(--glass-bg)]">
+          <span className="text-[10px] text-[var(--text-tertiary)] uppercase font-medium">{item.extension.replace('.', '')}</span>
         </div>
       )}
 
-      {/* Video play icon */}
+      {/* Video duration badge */}
+      {item.media_type === 'video' && (
+        <div className="video-duration">
+          <Play size={8} fill="currentColor" />
+          {item.duration ? formatDuration(item.duration) : ''}
+        </div>
+      )}
+
+      {/* Video play overlay on hover */}
       {item.media_type === 'video' && (
         <div className="video-overlay">
-          <div className="w-10 h-10 rounded-full bg-white/90 dark:bg-black/70 flex items-center justify-center shadow-lg">
-            <Play size={18} className="text-gray-900 dark:text-white ml-0.5" fill="currentColor" />
+          <div className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md flex items-center justify-center border border-white/10">
+            <Play size={16} className="text-white ml-0.5" fill="currentColor" />
           </div>
         </div>
       )}
 
       {/* Favorite badge */}
       {item.is_favorite && (
-        <div className="absolute top-2 right-2">
-          <Star size={14} className="text-amber-400" fill="currentColor" />
+        <div className="absolute top-1.5 right-1.5">
+          <Star size={12} className="text-amber-400 drop-shadow-lg" fill="currentColor" />
         </div>
       )}
 
-      {/* Bottom gradient overlay on hover */}
-      <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-        <span className="absolute bottom-2 left-2 text-[10px] text-white/90 truncate max-w-[90%]">
+      {/* Hover info overlay */}
+      <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-black/50 to-transparent
+        opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+        <span className="absolute bottom-1.5 left-2 text-[9px] text-white/80 truncate max-w-[90%] font-medium">
           {item.filename}
         </span>
       </div>
@@ -123,15 +132,21 @@ function MediaThumbnail({ item, index }: { item: MediaItem; index: number }) {
   );
 }
 
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
 export function MediaGrid({ items }: MediaGridProps) {
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
-        <div className="w-16 h-16 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
-          <Star size={24} className="text-gray-400" />
+        <div className="w-14 h-14 rounded-2xl bg-[var(--glass-bg)] flex items-center justify-center mb-4 border border-[var(--glass-border)]">
+          <Star size={22} className="text-[var(--text-tertiary)]" />
         </div>
-        <p className="text-sm text-gray-500 dark:text-gray-400">No media found</p>
-        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Try adjusting your filters</p>
+        <p className="text-sm text-[var(--text-secondary)]">No media found</p>
+        <p className="text-[11px] text-[var(--text-tertiary)] mt-1">Try adjusting your filters</p>
       </div>
     );
   }

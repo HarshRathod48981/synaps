@@ -16,7 +16,7 @@ STORAGE_PATH = os.getenv("SYNAPS_STORAGE_PATH", str(PROJECT_ROOT / "mock_storage
 
 # Whitelist directories for media timeline (if empty, entire Vault is scanned)
 ALLOWED_SCAN_PATHS = [
-    # os.path.join(STORAGE_PATH, "Vault", "Harsh", "Iphone")
+    STORAGE_PATH
 ]
 
 # Blacklist directories that should be skipped during scanning
